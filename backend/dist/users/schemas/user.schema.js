@@ -54,7 +54,7 @@ __decorate([
 __decorate([
     (0, mongoose_1.Prop)({
         required: true,
-        enum: ['Active', 'Blocked', 'Demo'],
+        enum: ['Active', 'Locked', 'Demo'],
         default: 'Active',
     }),
     __metadata("design:type", String)

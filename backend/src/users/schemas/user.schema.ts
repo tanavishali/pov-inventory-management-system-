@@ -23,7 +23,7 @@ export class User {
 
   @Prop({
     required: true,
-    enum: ['Active', 'Blocked', 'Demo'],
+    enum: ['Active', 'Locked', 'Demo'],
     default: 'Active',
   })
   status: string;

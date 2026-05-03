@@ -75,7 +75,7 @@ export default function App() {
       <Routes>
         {!user ? (
           <Route path="*" element={<AuthPage onLogin={handleLogin} />} />
-        ) : user.status === 'Locked' || user.status === 'Blocked' ? (
+        ) : user.status === 'Locked' ? (
           <Route path="*" element={
             <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', padding: '20px', textAlign: 'center' }}>
               <div style={{ width: '80px', height: '80px', background: '#fee2e2', color: '#ef4444', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '32px', marginBottom: '20px' }}>

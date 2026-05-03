@@ -9,9 +9,10 @@ var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.UpdateAdminDto = exports.CreateAdminDto = void 0;
+exports.RenewAdminDto = exports.UpdateAdminDto = exports.CreateAdminDto = void 0;
 const swagger_1 = require("@nestjs/swagger");
 const class_validator_1 = require("class-validator");
+const class_transformer_1 = require("class-transformer");
 class CreateAdminDto {
     name;
     email;
@@ -64,6 +65,7 @@ class UpdateAdminDto {
     plan;
     monthlyFee;
     status;
+    feeStatus;
     expiryDate;
 }
 exports.UpdateAdminDto = UpdateAdminDto;
@@ -95,8 +97,26 @@ __decorate([
     __metadata("design:type", String)
 ], UpdateAdminDto.prototype, "status", void 0);
 __decorate([
+    (0, swagger_1.ApiProperty)({ enum: ['Paid', 'Unpaid', 'Overdue'], required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsEnum)(['Paid', 'Unpaid', 'Overdue']),
+    __metadata("design:type", String)
+], UpdateAdminDto.prototype, "feeStatus", void 0);
+__decorate([
     (0, swagger_1.ApiProperty)({ required: false }),
     (0, class_validator_1.IsOptional)(),
     __metadata("design:type", String)
 ], UpdateAdminDto.prototype, "expiryDate", void 0);
+class RenewAdminDto {
+    days;
+}
+exports.RenewAdminDto = RenewAdminDto;
+__decorate([
+    (0, swagger_1.ApiProperty)({ example: 30, description: 'Number of days to extend the subscription', required: false }),
+    (0, class_validator_1.IsOptional)(),
+    (0, class_transformer_1.Type)(() => Number),
+    (0, class_validator_1.IsInt)(),
+    (0, class_validator_1.Min)(1),
+    __metadata("design:type", Number)
+], RenewAdminDto.prototype, "days", void 0);
 //# sourceMappingURL=admin-management.dto.js.map

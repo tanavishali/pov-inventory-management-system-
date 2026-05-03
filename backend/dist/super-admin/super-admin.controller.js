@@ -35,17 +35,22 @@ let SuperAdminController = class SuperAdminController {
         return this.usersService.findAllAdmins();
     }
     update(id, updateAdminDto) {
-        return this.usersService.update(id, updateAdminDto);
+        const { password, ...safeData } = updateAdminDto;
+        const dataToUpdate = (password && !password.startsWith('$2b$') && !password.startsWith('$2a$'))
+            ? { ...safeData, password }
+            : safeData;
+        return this.usersService.update(id, dataToUpdate);
     }
     remove(id) {
         return this.usersService.delete(id);
     }
-    async renew(id, days) {
+    async renew(id, body) {
         const user = await this.usersService.findById(id);
         if (!user)
             return { message: 'User not found' };
+        const safeDays = (body?.days && body.days > 0) ? body.days : 30;
         const currentExpiry = user.expiryDate ? new Date(user.expiryDate) : new Date();
-        currentExpiry.setDate(currentExpiry.getDate() + (days || 30));
+        currentExpiry.setDate(currentExpiry.getDate() + safeDays);
         return this.usersService.update(id, {
             expiryDate: currentExpiry.toISOString().split('T')[0],
             status: 'Active',
@@ -90,9 +95,9 @@ __decorate([
     (0, common_1.Post)('admins/:id/renew'),
     (0, swagger_1.ApiOperation)({ summary: 'Renew or extend Shop Admin subscription' }),
     __param(0, (0, common_1.Param)('id')),
-    __param(1, (0, common_1.Body)('days')),
+    __param(1, (0, common_1.Body)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String, Number]),
+    __metadata("design:paramtypes", [String, admin_management_dto_1.RenewAdminDto]),
     __metadata("design:returntype", Promise)
 ], SuperAdminController.prototype, "renew", null);
 exports.SuperAdminController = SuperAdminController = __decorate([

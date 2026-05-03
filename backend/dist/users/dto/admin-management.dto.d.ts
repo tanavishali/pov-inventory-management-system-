@@ -13,5 +13,9 @@ export declare class UpdateAdminDto {
     plan?: string;
     monthlyFee?: number;
     status?: string;
+    feeStatus?: string;
     expiryDate?: string;
+}
+export declare class RenewAdminDto {
+    days?: number;
 }

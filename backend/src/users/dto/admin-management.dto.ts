@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsEnum, IsNumber, IsOptional, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsEnum, IsNumber, IsOptional, MinLength, IsInt, Min } from 'class-validator';
+import { Type } from 'class-transformer';
 
 export class CreateAdminDto {
   @ApiProperty({ example: 'Al-Falah General Store' })
@@ -55,7 +56,21 @@ export class UpdateAdminDto {
   @IsOptional()
   status?: string;
 
+  @ApiProperty({ enum: ['Paid', 'Unpaid', 'Overdue'], required: false })
+  @IsOptional()
+  @IsEnum(['Paid', 'Unpaid', 'Overdue'])
+  feeStatus?: string;
+
   @ApiProperty({ required: false })
   @IsOptional()
   expiryDate?: string;
+}
+
+export class RenewAdminDto {
+  @ApiProperty({ example: 30, description: 'Number of days to extend the subscription', required: false })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  days?: number;
 }

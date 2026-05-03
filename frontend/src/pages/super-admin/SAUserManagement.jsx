@@ -1,4 +1,11 @@
 import { useState } from 'react'
+import {
+  useGetAdminsQuery,
+  useCreateAdminMutation,
+  useUpdateAdminMutation,
+  useDeleteAdminMutation,
+  useRenewAdminMutation,
+} from '../../store/slices/superAdminApiSlice'
 
 const PLAN_OPTIONS = ['Basic', 'Premium', 'Enterprise']
 const STATUS_OPTIONS = ['Active', 'Locked', 'Demo']
@@ -39,14 +46,13 @@ function Modal({ isOpen, onClose, children }) {
   )
 }
 
-export default function SAUserManagement({ users: propUsers, setUsers: propSetUsers }) {
-  // Fallback to internal state if not provided by parent App.jsx
-  const [internalUsers, setInternalUsers] = useState([
-    { id: 1, name: 'Hassan Electronics', email: 'admin@pos.com', password: 'password123', plan: 'Premium', status: 'Active', feeStatus: 'Paid', purchasedOn: '2023-10-12', expiryDate: '2024-04-12', monthlyFee: 2500, role: 'admin' },
-    { id: 2, name: 'Sana General Store', email: 'sana@pos.com', password: 'password123', plan: 'Basic', status: 'Locked', feeStatus: 'Unpaid', purchasedOn: '2024-01-05', expiryDate: '2024-02-05', monthlyFee: 1500, role: 'admin' },
-  ])
-  const users = propUsers !== undefined ? propUsers : internalUsers
-  const setUsers = propSetUsers !== undefined ? propSetUsers : setInternalUsers
+export default function SAUserManagement() {
+  // ── Real API hooks ──
+  const { data: admins = [], isLoading, isError, refetch } = useGetAdminsQuery()
+  const [createAdmin, { isLoading: creating }] = useCreateAdminMutation()
+  const [updateAdmin]  = useUpdateAdminMutation()
+  const [deleteAdmin]  = useDeleteAdminMutation()
+  const [renewAdmin]   = useRenewAdminMutation()
 
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
@@ -57,14 +63,14 @@ export default function SAUserManagement({ users: propUsers, setUsers: propSetUs
 
   // Edit modal
   const [editUser, setEditUser] = useState(null)
+  const [editNewPassword, setEditNewPassword] = useState('')
 
   // Subscription modal
   const [subUser, setSubUser] = useState(null)
   const [subDays, setSubDays] = useState(30)
 
-  const safeUsers = Array.isArray(users) ? users : []
+  const safeUsers = Array.isArray(admins) ? admins : []
   const filtered = safeUsers
-    .filter(u => u.role !== 'super-admin')
     .filter(u => filterStatus === 'all' || u.status === filterStatus)
     .filter(u =>
       u.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -72,50 +78,82 @@ export default function SAUserManagement({ users: propUsers, setUsers: propSetUs
     )
 
   /* ── Actions ── */
-  const setStatus = (id, status) => setUsers(prev => prev.map(u => u.id === id ? { ...u, status } : u))
-
-  const deleteUser = (id) => {
-    if (window.confirm('Is account ko permanently delete karna chahte hain? Yeh wapas nahi aayega.'))
-      setUsers(prev => prev.filter(u => u.id !== id))
+  const setStatus = async (id, status) => {
+    try { await updateAdmin({ id, status }).unwrap() }
+    catch (e) { alert('Status update failed: ' + (e?.data?.message || e.message)) }
   }
 
-  const handleCreate = () => {
+  const deleteUser = async (id) => {
+    if (!window.confirm('Is account ko permanently delete karna chahte hain?')) return
+    try { await deleteAdmin(id).unwrap() }
+    catch (e) { alert('Delete failed: ' + (e?.data?.message || e.message)) }
+  }
+
+  const handleCreate = async () => {
     if (!newUser.name.trim() || !newUser.email.trim() || !newUser.password.trim()) return
-    const id = Date.now()
     const isDemo = newUser.status === 'Demo'
     const expiryDate = addDays(isDemo ? parseInt(newUser.demoDays) || 14 : 30)
-    const entry = {
-      ...newUser, id, role: 'admin',
-      feeStatus: newUser.status === 'Demo' ? 'Unpaid' : 'Paid',
-      purchasedOn: new Date().toISOString().split('T')[0],
-      expiryDate,
+    const payload = { name: newUser.name, email: newUser.email, password: newUser.password, plan: newUser.plan, monthlyFee: newUser.monthlyFee, status: newUser.status, expiryDate }
+    try {
+      await createAdmin(payload).unwrap()
+      setShowCreate(false)
+      setNewUser({ name: '', email: '', password: '', plan: 'Basic', monthlyFee: 1500, status: 'Active', demoDays: 14 })
+      alert(`Account ban gaya!\nEmail: ${newUser.email}\nPassword: ${newUser.password}`)
+    } catch (e) { alert('Create failed: ' + (e?.data?.message || e.message)) }
+  }
+
+  const handleEdit = async () => {
+    // Only send fields that UpdateAdminDto accepts — strip all MongoDB metadata
+    const payload = {
+      name:       editUser.name,
+      email:      editUser.email,
+      plan:       editUser.plan,
+      monthlyFee: editUser.monthlyFee,
+      status:     editUser.status,
+      feeStatus:  editUser.feeStatus,
+      expiryDate: editUser.expiryDate,
     }
-    setUsers(prev => [...prev, entry])
-    setShowCreate(false)
-    setNewUser({ name: '', email: '', password: '', plan: 'Basic', monthlyFee: 1500, status: 'Active', demoDays: 14 })
-    alert(`Account ban gaya!\nEmail: ${entry.email}\nPassword: ${entry.password}`)
+    // Only include new password if user typed one
+    if (editNewPassword.trim()) {
+      payload.password = editNewPassword.trim()
+    }
+    const id = editUser._id || editUser.id
+    try {
+      await updateAdmin({ id, ...payload }).unwrap()
+      setEditUser(null)
+      setEditNewPassword('')
+    } catch (e) { alert('Update failed: ' + (e?.data?.message || JSON.stringify(e?.data) || e.message)) }
   }
 
-  const handleEdit = () => {
-    setUsers(prev => prev.map(u => u.id === editUser.id ? { ...editUser } : u))
-    setEditUser(null)
-  }
-
-  const handleSub = () => {
+  const handleSub = async () => {
     const days = parseInt(subDays) || 30
-    setUsers(prev => prev.map(u => u.id === subUser.id
-      ? { ...u, expiryDate: addDays(days), feeStatus: 'Paid', status: 'Active' }
-      : u
-    ))
-    setSubUser(null)
+    try {
+      await renewAdmin({ id: subUser._id || subUser.id, days }).unwrap()
+      setSubUser(null)
+    } catch (e) { alert('Renew failed: ' + (e?.data?.message || e.message)) }
   }
 
   const counts = {
-    all: safeUsers.filter(u => u.role !== 'super-admin').length,
-    Active: safeUsers.filter(u => u.role !== 'super-admin' && u.status === 'Active').length,
-    Locked: safeUsers.filter(u => u.role !== 'super-admin' && u.status === 'Locked').length,
-    Demo:   safeUsers.filter(u => u.role !== 'super-admin' && u.status === 'Demo').length,
+    all:    safeUsers.length,
+    Active: safeUsers.filter(u => u.status === 'Active').length,
+    Locked: safeUsers.filter(u => u.status === 'Locked').length,
+    Demo:   safeUsers.filter(u => u.status === 'Demo').length,
   }
+
+  if (isLoading) return (
+    <div style={{ textAlign: 'center', padding: '80px 20px', color: '#64748b' }}>
+      <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '36px', color: '#0ea5e9', marginBottom: '14px', display: 'block' }} />
+      <div style={{ fontWeight: 600 }}>Loading admins...</div>
+    </div>
+  )
+
+  if (isError) return (
+    <div style={{ textAlign: 'center', padding: '80px 20px', color: '#dc2626' }}>
+      <i className="fa-solid fa-triangle-exclamation" style={{ fontSize: '36px', marginBottom: '14px', display: 'block' }} />
+      <div style={{ fontWeight: 600, marginBottom: '12px' }}>Could not load admins from server.</div>
+      <button onClick={refetch} style={{ padding: '8px 20px', borderRadius: '8px', background: '#0ea5e9', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 700 }}>Retry</button>
+    </div>
+  )
 
   const Label = ({ children }) => (
     <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '6px' }}>{children}</div>
@@ -185,7 +223,7 @@ export default function SAUserManagement({ users: propUsers, setUsers: propSetUs
             const ss = STATUS_STYLE[u.status] || STATUS_STYLE.Active
             const fs = FEE_STYLE[u.feeStatus] || FEE_STYLE.Unpaid
             return (
-              <div key={u.id} style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '14px', padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,.06)', transition: 'all .2s' }}
+              <div key={u._id} style={{ background: '#fff', border: '1.5px solid #e2e8f0', borderRadius: '14px', padding: '18px 20px', boxShadow: '0 1px 4px rgba(0,0,0,.06)', transition: 'all .2s' }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = '#bae6fd'; e.currentTarget.style.boxShadow = '0 4px 18px rgba(14,165,233,.1)' }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.boxShadow = '0 1px 4px rgba(0,0,0,.06)' }}
               >
@@ -243,7 +281,7 @@ export default function SAUserManagement({ users: propUsers, setUsers: propSetUs
                 <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '14px' }}>
                   {/* Activate */}
                   {u.status !== 'Active' && (
-                    <button onClick={() => setStatus(u.id, 'Active')}
+                    <button onClick={() => setStatus(u._id, 'Active')}
                       style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 13px', borderRadius: '8px', border: 'none', background: '#dcfce7', color: '#16a34a', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
                       onMouseEnter={e => e.currentTarget.style.background = '#bbf7d0'}
                       onMouseLeave={e => e.currentTarget.style.background = '#dcfce7'}
@@ -253,7 +291,7 @@ export default function SAUserManagement({ users: propUsers, setUsers: propSetUs
                   )}
                   {/* Lock */}
                   {u.status !== 'Locked' && (
-                    <button onClick={() => setStatus(u.id, 'Locked')}
+                    <button onClick={() => setStatus(u._id, 'Locked')}
                       style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 13px', borderRadius: '8px', border: 'none', background: '#fee2e2', color: '#dc2626', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
                       onMouseEnter={e => e.currentTarget.style.background = '#fecaca'}
                       onMouseLeave={e => e.currentTarget.style.background = '#fee2e2'}
@@ -263,7 +301,7 @@ export default function SAUserManagement({ users: propUsers, setUsers: propSetUs
                   )}
                   {/* Demo */}
                   {u.status !== 'Demo' && (
-                    <button onClick={() => setStatus(u.id, 'Demo')}
+                    <button onClick={() => setStatus(u._id, 'Demo')}
                       style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 13px', borderRadius: '8px', border: 'none', background: '#fef9c3', color: '#b45309', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
                       onMouseEnter={e => e.currentTarget.style.background = '#fde68a'}
                       onMouseLeave={e => e.currentTarget.style.background = '#fef9c3'}
@@ -288,7 +326,7 @@ export default function SAUserManagement({ users: propUsers, setUsers: propSetUs
                     <i className="fa-solid fa-pen-to-square" /> Edit
                   </button>
                   {/* Delete */}
-                  <button onClick={() => deleteUser(u.id)}
+                  <button onClick={() => deleteUser(u._id)}
                     style={{ display: 'flex', alignItems: 'center', gap: '5px', padding: '7px 13px', borderRadius: '8px', border: 'none', background: '#1e293b', color: '#f1f5f9', fontSize: '12px', fontWeight: 700, cursor: 'pointer', marginLeft: 'auto' }}
                     onMouseEnter={e => e.currentTarget.style.background = '#334155'}
                     onMouseLeave={e => e.currentTarget.style.background = '#1e293b'}
@@ -379,7 +417,7 @@ export default function SAUserManagement({ users: propUsers, setUsers: propSetUs
             <div style={{ fontWeight: 800, fontSize: '18px', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '8px' }}>
               <i className="fa-solid fa-pen-to-square" style={{ color: '#6d28d9' }} /> Account Edit Karo
             </div>
-            <button onClick={() => setEditUser(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '18px' }}>
+            <button onClick={() => { setEditUser(null); setEditNewPassword('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: '18px' }}>
               <i className="fa-solid fa-xmark" />
             </button>
           </div>
@@ -394,8 +432,8 @@ export default function SAUserManagement({ users: propUsers, setUsers: propSetUs
               <input style={inpStyle} value={editUser.email} onChange={e => setEditUser({ ...editUser, email: e.target.value })} />
             </div>
             <div style={{ gridColumn: '1/-1' }}>
-              <Label>Password</Label>
-              <input style={inpStyle} value={editUser.password} onChange={e => setEditUser({ ...editUser, password: e.target.value })} />
+              <Label>New Password <span style={{ color: '#94a3b8', fontWeight: 400, fontSize: '11px' }}>(leave blank to keep unchanged)</span></Label>
+              <input style={inpStyle} type="password" value={editNewPassword} placeholder="Enter new password..." onChange={e => setEditNewPassword(e.target.value)} />
             </div>
             <div>
               <Label>Plan</Label>
