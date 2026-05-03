@@ -1,0 +1,32 @@
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Plus Jakarta Sans', 'Nunito', sans-serif;
+  overflow-x: hidden;
+}
+
+:root {
+  --bg: #f0f4f8;
+  --surface: #ffffff;
+  --surface2: #f5f7fa;
+  --border: #e2e8f0;
+  --accent: #0ea5e9;
+  --accent2: #6366f1;
+  --danger: #ef4444;
+  --warn: #f59e0b;
+  --success: #10b981;
+  --text: #1e293b;
+  --muted: #94a3b8;
+  --sidebar-w: 260px;
+  --shadow: 0 1px 3px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.05);
+  --blue: #3366ff;
+}
+
+/* ── Hide scrollbars globally (keep functionality) ── */
+* {
+  scrollbar-width: none;       /* Firefox */
+  -ms-overflow-style: none;    /* IE/Edge */
+}
+*::-webkit-scrollbar {
+  display: none;               /* Chrome/Safari/Opera */
+}
