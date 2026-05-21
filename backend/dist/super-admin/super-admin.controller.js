@@ -16,14 +16,127 @@ exports.SuperAdminController = void 0;
 const common_1 = require("@nestjs/common");
 const swagger_1 = require("@nestjs/swagger");
 const users_service_1 = require("../users/users.service");
+const payments_service_1 = require("../payments/payments.service");
 const admin_management_dto_1 = require("../users/dto/admin-management.dto");
 const jwt_auth_guard_1 = require("../auth/guards/jwt-auth.guard");
 const roles_guard_1 = require("../auth/guards/roles.guard");
 const roles_decorator_1 = require("../auth/decorators/roles.decorator");
 let SuperAdminController = class SuperAdminController {
     usersService;
-    constructor(usersService) {
+    paymentsService;
+    constructor(usersService, paymentsService) {
         this.usersService = usersService;
+        this.paymentsService = paymentsService;
+    }
+    async getStats() {
+        const admins = await this.usersService.findAllAdmins();
+        const payments = await this.paymentsService.findAll();
+        const totalLicenses = admins.length;
+        const activeShops = admins.filter(u => u.status === 'Active').length;
+        const demoShops = admins.filter(u => u.status === 'Demo').length;
+        const lockedShops = admins.filter(u => u.status === 'Locked').length;
+        const unpaidAccounts = admins.filter(u => u.feeStatus === 'Unpaid' || u.feeStatus === 'Overdue').length;
+        const expectedMrr = admins
+            .filter(u => u.status === 'Active')
+            .reduce((sum, u) => sum + (u.monthlyFee || 0), 0);
+        const totalCollected = payments
+            .filter(p => p.status === 'Paid')
+            .reduce((sum, p) => sum + p.amount, 0);
+        const totalPending = payments
+            .filter(p => p.status === 'Pending')
+            .reduce((sum, p) => sum + p.amount, 0);
+        const planStats = {
+            Basic: admins.filter(u => u.plan === 'Basic').length,
+            Premium: admins.filter(u => u.plan === 'Premium').length,
+            Enterprise: admins.filter(u => u.plan === 'Enterprise').length,
+        };
+        const methodStats = {
+            EasyPaisa: payments.filter(p => p.method === 'EasyPaisa').length,
+            JazzCash: payments.filter(p => p.method === 'JazzCash').length,
+            BankTransfer: payments.filter(p => p.method === 'Bank Transfer').length,
+            Unspecified: payments.filter(p => !p.method).length,
+        };
+        const recentPayments = payments.slice(0, 5);
+        const recentAdmins = admins.slice(-5).reverse();
+        return {
+            totalLicenses,
+            activeShops,
+            demoShops,
+            lockedShops,
+            unpaidAccounts,
+            expectedMrr,
+            totalCollected,
+            totalPending,
+            planStats,
+            methodStats,
+            recentPayments,
+            recentAdmins,
+        };
+    }
+    async getRevenue() {
+        const admins = await this.usersService.findAllAdmins();
+        const payments = await this.paymentsService.findAll();
+        const totalCollected = payments
+            .filter(p => p.status === 'Paid')
+            .reduce((sum, p) => sum + p.amount, 0);
+        const totalPending = payments
+            .filter(p => p.status === 'Pending')
+            .reduce((sum, p) => sum + p.amount, 0);
+        const expectedMrr = admins
+            .filter(u => u.status === 'Active')
+            .reduce((sum, u) => sum + (u.monthlyFee || 0), 0);
+        const monthlyStats = {};
+        payments.forEach(p => {
+            const m = p.month || 'Unspecified';
+            if (!monthlyStats[m]) {
+                monthlyStats[m] = { month: m, expected: 0, collected: 0, pending: 0 };
+            }
+            monthlyStats[m].expected += p.amount;
+            if (p.status === 'Paid') {
+                monthlyStats[m].collected += p.amount;
+            }
+            else {
+                monthlyStats[m].pending += p.amount;
+            }
+        });
+        const revenueByMonth = Object.values(monthlyStats);
+        const tierStats = {};
+        payments.forEach(p => {
+            const tier = p.plan || 'Basic';
+            if (!tierStats[tier]) {
+                tierStats[tier] = { tier, collected: 0, count: 0 };
+            }
+            if (p.status === 'Paid') {
+                tierStats[tier].collected += p.amount;
+                tierStats[tier].count += 1;
+            }
+        });
+        const revenueByTier = Object.values(tierStats);
+        const methodStats = {};
+        payments.filter(p => p.status === 'Paid').forEach(p => {
+            const method = p.method || 'Unspecified';
+            if (!methodStats[method]) {
+                methodStats[method] = { method, collected: 0, count: 0 };
+            }
+            methodStats[method].collected += p.amount;
+            methodStats[method].count += 1;
+        });
+        const revenueByMethod = Object.values(methodStats);
+        const statsSummary = {
+            totalCollected,
+            totalPending,
+            expectedMrr,
+            totalTransactions: payments.length,
+            paidTransactions: payments.filter(p => p.status === 'Paid').length,
+            pendingTransactions: payments.filter(p => p.status === 'Pending').length,
+        };
+        return {
+            summary: statsSummary,
+            revenueByMonth,
+            revenueByTier,
+            revenueByMethod,
+            paymentsList: payments
+        };
     }
     createAdmin(createAdminDto) {
         return this.usersService.create({
@@ -59,6 +172,20 @@ let SuperAdminController = class SuperAdminController {
     }
 };
 exports.SuperAdminController = SuperAdminController;
+__decorate([
+    (0, common_1.Get)('stats'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get aggregated platform overview statistics' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], SuperAdminController.prototype, "getStats", null);
+__decorate([
+    (0, common_1.Get)('revenue'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get detailed platform revenue analytics' }),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", Promise)
+], SuperAdminController.prototype, "getRevenue", null);
 __decorate([
     (0, common_1.Post)('admins'),
     (0, swagger_1.ApiOperation)({ summary: 'Create a new Shop Admin (Shop Owner)' }),
@@ -106,6 +233,7 @@ exports.SuperAdminController = SuperAdminController = __decorate([
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard, roles_guard_1.RolesGuard),
     (0, roles_decorator_1.Roles)('super-admin'),
     (0, common_1.Controller)('super-admin'),
-    __metadata("design:paramtypes", [users_service_1.UsersService])
+    __metadata("design:paramtypes", [users_service_1.UsersService,
+        payments_service_1.PaymentsService])
 ], SuperAdminController);
 //# sourceMappingURL=super-admin.controller.js.map

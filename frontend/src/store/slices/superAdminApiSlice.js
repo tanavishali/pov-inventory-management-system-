@@ -48,6 +48,53 @@ export const superAdminApiSlice = apiSlice.injectEndpoints({
       invalidatesTags: ['Admin'],
     }),
 
+    // GET /super-admin/payments — list all payments
+    getPayments: builder.query({
+      query: () => '/super-admin/payments',
+      providesTags: ['Payment'],
+    }),
+
+    // POST /super-admin/payments — create a new payment
+    createPayment: builder.mutation({
+      query: (data) => ({
+        url: '/super-admin/payments',
+        method: 'POST',
+        body: data,
+      }),
+      invalidatesTags: ['Payment'],
+    }),
+
+    // PATCH /super-admin/payments/:id/pay — mark payment as paid
+    markPaymentPaid: builder.mutation({
+      query: ({ id, method }) => ({
+        url: `/super-admin/payments/${id}/pay`,
+        method: 'PATCH',
+        body: { method },
+      }),
+      invalidatesTags: ['Payment'],
+    }),
+
+    // DELETE /super-admin/payments/:id — delete a payment
+    deletePayment: builder.mutation({
+      query: (id) => ({
+        url: `/super-admin/payments/${id}`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: ['Payment'],
+    }),
+
+    // GET /super-admin/stats — get aggregated platform statistics
+    getPlatformStats: builder.query({
+      query: () => '/super-admin/stats',
+      providesTags: ['Admin', 'Payment'],
+    }),
+
+    // GET /super-admin/revenue — get detailed platform revenue analytics
+    getDetailedRevenue: builder.query({
+      query: () => '/super-admin/revenue',
+      providesTags: ['Admin', 'Payment'],
+    }),
+
   }),
 });
 
@@ -57,4 +104,10 @@ export const {
   useUpdateAdminMutation,
   useDeleteAdminMutation,
   useRenewAdminMutation,
+  useGetPaymentsQuery,
+  useCreatePaymentMutation,
+  useMarkPaymentPaidMutation,
+  useDeletePaymentMutation,
+  useGetPlatformStatsQuery,
+  useGetDetailedRevenueQuery,
 } = superAdminApiSlice;

@@ -1,15 +1,10 @@
 import { useState, useMemo } from 'react'
-
-const INITIAL_PAYMENTS = [
-  { id: 'PAY-001', shop: 'Hassan Electronics',  email: 'admin@pos.com',  amount: 2500, plan: 'Premium',    method: 'EasyPaisa',  date: '01 Apr 2026', status: 'Paid',    month: 'April 2026' },
-  { id: 'PAY-002', shop: 'Sana General Store',   email: 'sana@pos.com',   amount: 1500, plan: 'Basic',      method: 'JazzCash',   date: '01 Apr 2026', status: 'Pending', month: 'April 2026' },
-  { id: 'PAY-003', shop: 'Al-Madina Traders',    email: 'almadina@pos.com',amount: 3500, plan: 'Enterprise', method: 'Bank Transfer',date: '28 Mar 2026', status: 'Paid',   month: 'March 2026' },
-  { id: 'PAY-004', shop: 'City Wholesale',       email: 'city@pos.com',   amount: 2500, plan: 'Premium',    method: 'EasyPaisa',  date: '25 Mar 2026', status: 'Paid',    month: 'March 2026' },
-  { id: 'PAY-005', shop: 'Khan Brothers Store',  email: 'khan@pos.com',   amount: 1500, plan: 'Basic',      method: '',           date: '01 Apr 2026', status: 'Pending', month: 'April 2026' },
-  { id: 'PAY-006', shop: 'Raza Depot',           email: 'raza@pos.com',   amount: 2500, plan: 'Premium',    method: 'JazzCash',   date: '20 Mar 2026', status: 'Paid',    month: 'March 2026' },
-  { id: 'PAY-007', shop: 'Al-Falah Mart',        email: 'alfalah@pos.com',amount: 1500, plan: 'Basic',      method: '',           date: '01 Apr 2026', status: 'Pending', month: 'April 2026' },
-  { id: 'PAY-008', shop: 'Rehman Traders',       email: 'rehman@pos.com', amount: 3500, plan: 'Enterprise', method: 'Bank Transfer',date: '15 Mar 2026', status: 'Paid',  month: 'March 2026' },
-]
+import {
+  useGetPaymentsQuery,
+  useCreatePaymentMutation,
+  useMarkPaymentPaidMutation,
+  useDeletePaymentMutation,
+} from '../../store/slices/superAdminApiSlice'
 
 const STATUS_STYLE = {
   Paid:    { bg: '#dcfce7', color: '#16a34a', icon: 'circle-check' },
@@ -42,7 +37,11 @@ function Modal({ isOpen, onClose, children }) {
 }
 
 export default function SAPayments() {
-  const [payments, setPayments] = useState(INITIAL_PAYMENTS)
+  const { data: payments = [], isLoading } = useGetPaymentsQuery()
+  const [createPayment] = useCreatePaymentMutation()
+  const [markPaymentPaid] = useMarkPaymentPaidMutation()
+  const [deletePaymentMutation] = useDeletePaymentMutation()
+
   const [search, setSearch] = useState('')
   const [filterStatus, setFilterStatus] = useState('all')
   const [markModal, setMarkModal] = useState(null)
@@ -64,35 +63,55 @@ export default function SAPayments() {
   const paidCount    = payments.filter(p => p.status === 'Paid').length
   const pendCount    = payments.filter(p => p.status === 'Pending').length
 
-  const markPaid = () => {
-    setPayments(prev => prev.map(p => p.id === markModal.id
-      ? { ...p, status: 'Paid', method: markMethod, date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) }
-      : p
-    ))
-    setMarkModal(null)
-  }
-
-  const handleAdd = () => {
-    if (!newPay.shop.trim() || !newPay.amount) return
-    const id = 'PAY-' + String(payments.length + 1).padStart(3, '0')
-    const entry = {
-      ...newPay, id, status: 'Pending',
-      amount: parseInt(newPay.amount) || 0,
-      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      month: newPay.month || new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }),
+  const markPaid = async () => {
+    try {
+      await markPaymentPaid({ id: markModal.id, method: markMethod }).unwrap()
+      setMarkModal(null)
+    } catch (err) {
+      console.error('Failed to mark payment as paid:', err)
+      alert('Payment mark karne mein galti hui: ' + (err.data?.message || err.error || JSON.stringify(err)))
     }
-    setPayments(prev => [entry, ...prev])
-    setAddModal(false)
-    setNewPay({ shop: '', email: '', amount: '', plan: 'Basic', method: 'EasyPaisa', month: '' })
   }
 
-  const deletePayment = (id) => {
-    if (window.confirm('Is payment record ko delete karna chahte hain?'))
-      setPayments(prev => prev.filter(p => p.id !== id))
+  const handleAdd = async () => {
+    if (!newPay.shop.trim() || !newPay.amount) return
+    try {
+      await createPayment({
+        shop: newPay.shop,
+        email: newPay.email,
+        amount: parseInt(newPay.amount) || 0,
+        plan: newPay.plan,
+        method: newPay.method,
+        month: newPay.month,
+      }).unwrap()
+      setAddModal(false)
+      setNewPay({ shop: '', email: '', amount: '', plan: 'Basic', method: 'EasyPaisa', month: '' })
+    } catch (err) {
+      console.error('Failed to create payment:', err)
+      alert('Payment add karne mein galti hui: ' + (err.data?.message || err.error || JSON.stringify(err)))
+    }
+  }
+
+  const deletePayment = async (id) => {
+    if (window.confirm('Is payment record ko delete karna chahte hain?')) {
+      try {
+        await deletePaymentMutation(id).unwrap()
+      } catch (err) {
+        console.error('Failed to delete payment:', err)
+        alert('Payment delete karne mein galti hui: ' + (err.data?.message || err.error || JSON.stringify(err)))
+      }
+    }
   }
 
   const Label = ({ children }) => (
     <div style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '6px' }}>{children}</div>
+  )
+
+  if (isLoading) return (
+    <div style={{ textAlign: 'center', padding: '80px 20px', color: '#64748b' }}>
+      <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '36px', color: '#0ea5e9', marginBottom: '14px', display: 'block' }} />
+      <div style={{ fontWeight: 600 }}>Loading payments...</div>
+    </div>
   )
 
   return (

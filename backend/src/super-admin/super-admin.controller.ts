@@ -1,6 +1,7 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from '../users/users.service';
+import { PaymentsService } from '../payments/payments.service';
 import { CreateAdminDto, UpdateAdminDto, RenewAdminDto } from '../users/dto/admin-management.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -12,7 +13,163 @@ import { Roles } from '../auth/decorators/roles.decorator';
 @Roles('super-admin')
 @Controller('super-admin')
 export class SuperAdminController {
-  constructor(private usersService: UsersService) {}
+  constructor(
+    private usersService: UsersService,
+    private paymentsService: PaymentsService,
+  ) {}
+
+  @Get('stats')
+  @ApiOperation({ summary: 'Get aggregated platform overview statistics' })
+  async getStats() {
+    const admins = await this.usersService.findAllAdmins();
+    const payments = await this.paymentsService.findAll();
+
+    // 1. Total Licenses Sold: Count of all admins
+    const totalLicenses = admins.length;
+
+    // 2. Active Shops: Count where status is 'Active'
+    const activeShops = admins.filter(u => u.status === 'Active').length;
+
+    // 3. Demo Shops: Count where status is 'Demo'
+    const demoShops = admins.filter(u => u.status === 'Demo').length;
+
+    // 4. Locked Shops: Count where status is 'Locked'
+    const lockedShops = admins.filter(u => u.status === 'Locked').length;
+
+    // 5. Unpaid Accounts: Count admins where feeStatus is 'Unpaid' or 'Overdue'
+    const unpaidAccounts = admins.filter(u => u.feeStatus === 'Unpaid' || u.feeStatus === 'Overdue').length;
+
+    // 6. Expected Monthly Recurring Revenue (MRR): Sum of monthlyFee for all active shop admins
+    const expectedMrr = admins
+      .filter(u => u.status === 'Active')
+      .reduce((sum, u) => sum + (u.monthlyFee || 0), 0);
+
+    // 7. Total Collected Revenue: Sum of Paid payments
+    const totalCollected = payments
+      .filter(p => p.status === 'Paid')
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    // 8. Pending Collection: Sum of Pending payments
+    const totalPending = payments
+      .filter(p => p.status === 'Pending')
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    // 9. Plan Distribution
+    const planStats = {
+      Basic: admins.filter(u => u.plan === 'Basic').length,
+      Premium: admins.filter(u => u.plan === 'Premium').length,
+      Enterprise: admins.filter(u => u.plan === 'Enterprise').length,
+    };
+
+    // 10. Payment Method Distribution
+    const methodStats = {
+      EasyPaisa: payments.filter(p => p.method === 'EasyPaisa').length,
+      JazzCash: payments.filter(p => p.method === 'JazzCash').length,
+      BankTransfer: payments.filter(p => p.method === 'Bank Transfer').length,
+      Unspecified: payments.filter(p => !p.method).length,
+    };
+
+    // 11. Recent Payments (latest 5)
+    const recentPayments = payments.slice(0, 5);
+
+    // 12. Recent Admins (latest 5)
+    const recentAdmins = admins.slice(-5).reverse();
+
+    return {
+      totalLicenses,
+      activeShops,
+      demoShops,
+      lockedShops,
+      unpaidAccounts,
+      expectedMrr,
+      totalCollected,
+      totalPending,
+      planStats,
+      methodStats,
+      recentPayments,
+      recentAdmins,
+    };
+  }
+
+  @Get('revenue')
+  @ApiOperation({ summary: 'Get detailed platform revenue analytics' })
+  async getRevenue() {
+    const admins = await this.usersService.findAllAdmins();
+    const payments = await this.paymentsService.findAll();
+
+    // Calculate overall revenue metrics
+    const totalCollected = payments
+      .filter(p => p.status === 'Paid')
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const totalPending = payments
+      .filter(p => p.status === 'Pending')
+      .reduce((sum, p) => sum + p.amount, 0);
+
+    const expectedMrr = admins
+      .filter(u => u.status === 'Active')
+      .reduce((sum, u) => sum + (u.monthlyFee || 0), 0);
+
+    // Group revenue by Month
+    const monthlyStats = {};
+    payments.forEach(p => {
+      const m = p.month || 'Unspecified';
+      if (!monthlyStats[m]) {
+        monthlyStats[m] = { month: m, expected: 0, collected: 0, pending: 0 };
+      }
+      monthlyStats[m].expected += p.amount;
+      if (p.status === 'Paid') {
+        monthlyStats[m].collected += p.amount;
+      } else {
+        monthlyStats[m].pending += p.amount;
+      }
+    });
+    const revenueByMonth = Object.values(monthlyStats);
+
+    // Group revenue by Subscription Tier (Plan)
+    const tierStats = {};
+    payments.forEach(p => {
+      const tier = p.plan || 'Basic';
+      if (!tierStats[tier]) {
+        tierStats[tier] = { tier, collected: 0, count: 0 };
+      }
+      if (p.status === 'Paid') {
+        tierStats[tier].collected += p.amount;
+        tierStats[tier].count += 1;
+      }
+    });
+    const revenueByTier = Object.values(tierStats);
+
+    // Group revenue by Payment Gateway Method
+    const methodStats = {};
+    payments.filter(p => p.status === 'Paid').forEach(p => {
+      const method = p.method || 'Unspecified';
+      if (!methodStats[method]) {
+        methodStats[method] = { method, collected: 0, count: 0 };
+      }
+      methodStats[method].collected += p.amount;
+      methodStats[method].count += 1;
+    });
+    const revenueByMethod = Object.values(methodStats);
+
+    // Dynamic summary statistics
+    const statsSummary = {
+      totalCollected,
+      totalPending,
+      expectedMrr,
+      totalTransactions: payments.length,
+      paidTransactions: payments.filter(p => p.status === 'Paid').length,
+      pendingTransactions: payments.filter(p => p.status === 'Pending').length,
+    };
+
+    return {
+      summary: statsSummary,
+      revenueByMonth,
+      revenueByTier,
+      revenueByMethod,
+      paymentsList: payments
+    };
+  }
 
   @Post('admins')
   @ApiOperation({ summary: 'Create a new Shop Admin (Shop Owner)' })
@@ -32,8 +189,6 @@ export class SuperAdminController {
   @Patch('admins/:id')
   @ApiOperation({ summary: 'Update Shop Admin details' })
   update(@Param('id') id: string, @Body() updateAdminDto: UpdateAdminDto) {
-    // Strip password from update — use dedicated change-password if needed
-    // Also skip if it looks like an already-hashed bcrypt value
     const { password, ...safeData } = updateAdminDto as any;
     const dataToUpdate = (password && !password.startsWith('$2b$') && !password.startsWith('$2a$'))
       ? { ...safeData, password }
