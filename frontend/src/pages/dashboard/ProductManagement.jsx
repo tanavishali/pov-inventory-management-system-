@@ -1,20 +1,11 @@
 import { useState, useMemo } from 'react'
-
-/* ─── Initial Data ─── */
-export const INITIAL_PRODUCTS = [
-  { id:1,  name:'Basmati Rice 5kg',     cat:'FMCG',      purchase:1800, selling:2200, stock:8,  threshold:10, ctn:12 },
-  { id:2,  name:'Cooking Oil 5L',       cat:'FMCG',      purchase:2100, selling:2600, stock:15, threshold:20, ctn:12 },
-  { id:3,  name:'Sugar 50kg Bag',       cat:'FMCG',      purchase:5500, selling:6200, stock:5,  threshold:8,  ctn:10 },
-  { id:4,  name:'Detergent Powder 1kg', cat:'Household', purchase:380,  selling:480,  stock:28, threshold:15, ctn:24 },
-  { id:5,  name:'Tea Leaves 1kg',       cat:'Beverages', purchase:1200, selling:1600, stock:11, threshold:12, ctn:12 },
-  { id:6,  name:'Flour 10kg',           cat:'FMCG',      purchase:1400, selling:1750, stock:40, threshold:15, ctn:10 },
-  { id:7,  name:'Shampoo 200ml',        cat:'Household', purchase:220,  selling:280,  stock:0,  threshold:10, ctn:24 },
-  { id:8,  name:'Biscuits Pack 12',     cat:'Beverages', purchase:150,  selling:195,  stock:0,  threshold:20, ctn:24 },
-  { id:9,  name:'Soap Bar x6',          cat:'Household', purchase:280,  selling:360,  stock:35, threshold:10, ctn:12 },
-  { id:10, name:'Milk Powder 400g',     cat:'Beverages', purchase:950,  selling:1150, stock:18, threshold:10, ctn:12 },
-  { id:11, name:'Black Pepper 100g',    cat:'FMCG',      purchase:180,  selling:240,  stock:9,  threshold:10, ctn:24 },
-  { id:12, name:'Lemon Juice 500ml',    cat:'Beverages', purchase:240,  selling:310,  stock:0,  threshold:5,  ctn:24 },
-]
+import {
+  useGetProductsQuery,
+  useCreateProductMutation,
+  useUpdateProductMutation,
+  useDeleteProductMutation,
+} from '../../store/slices/productsApiSlice'
+export const INITIAL_PRODUCTS = []
 
 const CATEGORIES = [
   'Grains', 'Spices', 'Oil & Ghee', 'Snacks', 'Beverages',
@@ -464,7 +455,11 @@ function EditModal({ isOpen, onClose, product, onSave }) {
 
 /* ─── MAIN COMPONENT ─── */
 export default function ProductManagement() {
-  const [products, setProducts] = useState(INITIAL_PRODUCTS)
+  const { data: products = [], isLoading, isError, refetch } = useGetProductsQuery()
+  const [createProduct] = useCreateProductMutation()
+  const [updateProduct] = useUpdateProductMutation()
+  const [deleteProduct] = useDeleteProductMutation()
+
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [view, setView] = useState('grid')
@@ -492,18 +487,57 @@ export default function ProductManagement() {
     return list
   }, [products, search, filter, sort])
 
-  const handleAdd = (data) => {
-    const newId = products.length ? Math.max(...products.map(p => p.id)) + 1 : 1
-    setProducts(prev => [...prev, { id: newId, ...data }])
+  const handleAdd = async (data) => {
+    try {
+      await createProduct(data).unwrap()
+    } catch (err) {
+      console.error('Failed to create product:', err)
+      alert('Product add karne mein masla hua.')
+    }
   }
 
-  const handleSave = (updated) => {
-    setProducts(prev => prev.map(p => p.id === updated.id ? updated : p))
+  const handleSave = async (updated) => {
+    try {
+      await updateProduct({ id: updated.id, ...updated }).unwrap()
+    } catch (err) {
+      console.error('Failed to update product:', err)
+      alert('Product update karne mein masla hua.')
+    }
   }
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (!window.confirm('Delete this product? This cannot be undone.')) return
-    setProducts(prev => prev.filter(p => p.id !== id))
+    try {
+      await deleteProduct(id).unwrap()
+    } catch (err) {
+      console.error('Failed to delete product:', err)
+      alert('Product delete karne mein masla hua.')
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px', color: '#64748b' }}>
+        <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '40px', color: '#0ea5e9', marginBottom: '16px' }} />
+        <div style={{ fontFamily: "'Outfit',sans-serif", fontWeight: 800, fontSize: '17px', color: '#1e293b' }}>Loading Inventory...</div>
+        <div style={{ fontSize: '12.5px', color: '#94a3b8', marginTop: '4px' }}>Connecting to database, please wait</div>
+      </div>
+    )
+  }
+
+  if (isError) {
+    return (
+      <div style={{ textAlign: 'center', padding: '60px 20px', color: '#dc2626', background: '#fff', borderRadius: '14px', border: '1px solid #fee2e2', maxWidth: '500px', margin: '40px auto' }}>
+        <i className="fa-solid fa-triangle-exclamation" style={{ fontSize: '44px', marginBottom: '16px', color: '#ef4444' }} />
+        <div style={{ fontWeight: 800, fontSize: '18px', color: '#1e293b', marginBottom: '8px' }}>Failed to Load Inventory</div>
+        <div style={{ fontSize: '13.5px', color: '#64748b', marginBottom: '20px' }}>
+          An error occurred while establishing a secure link with the warehouse service.
+        </div>
+        <button onClick={refetch} style={{ padding: '9px 24px', borderRadius: '8px', background: '#0ea5e9', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px', boxShadow: '0 2px 8px rgba(14,165,233,.2)' }}>
+          Retry Connection
+        </button>
+      </div>
+    )
   }
 
   const statsConfig = [
