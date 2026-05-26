@@ -9,6 +9,7 @@ import { SuperAdminController } from './super-admin/super-admin.controller';
 import { PaymentsModule } from './payments/payments.module';
 import { ProductsModule } from './products/products.module';
 import { OrdersModule } from './orders/orders.module';
+import { ShopsModule } from './shops/shops.module';
 
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
@@ -30,6 +31,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     PaymentsModule,
     ProductsModule,
     OrdersModule,
+    ShopsModule,
   ],
   controllers: [AppController, SuperAdminController],
   providers: [

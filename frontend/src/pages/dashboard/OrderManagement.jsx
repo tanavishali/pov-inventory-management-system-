@@ -1,8 +1,8 @@
 import { useState, useMemo, useRef } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { INITIAL_PRODUCTS } from './ProductManagement'
-import { INITIAL_SHOPS } from './ShopsManagement'
 import { useGetProductsQuery } from '../../store/slices/productsApiSlice'
+import { useGetShopsQuery } from '../../store/slices/shopsApiSlice'
 import {
   useCreateOrderMutation,
   useUpdateOrderMutation,
@@ -308,7 +308,7 @@ function ViewModal({ order, onClose, onPrint }) {
 }
 
 /* ─── New Order Modal ─── */
-function NewOrderModal({ isOpen, onClose, onPlace, products = [] }) {
+function NewOrderModal({ isOpen, onClose, onPlace, products = [], shops = [] }) {
   const [customer, setCustomer] = useState('')
   const [shop, setShop] = useState('')
   const [phone, setPhone] = useState('')
@@ -336,7 +336,7 @@ function NewOrderModal({ isOpen, onClose, onPlace, products = [] }) {
     setCustomer(val)
     if (val.trim().length < 1) { setCustSuggestions([]); return }
     const q = val.toLowerCase()
-    const matches = INITIAL_SHOPS.filter(s =>
+    const matches = shops.filter(s =>
       s.owner.toLowerCase().includes(q) || s.name.toLowerCase().includes(q)
     ).slice(0, 6)
     setCustSuggestions(matches)
@@ -1109,6 +1109,7 @@ export default function OrderManagement() {
   const isMobile = ctx.isMobile ?? false
 
   const { data: products = [] } = useGetProductsQuery()
+  const { data: shops = [] } = useGetShopsQuery()
   const [createOrder] = useCreateOrderMutation()
   const [updateOrder] = useUpdateOrderMutation()
   const [deleteOrder] = useDeleteOrderMutation()
@@ -1559,7 +1560,7 @@ export default function OrderManagement() {
 
       {/* Modals */}
       <ViewModal order={viewOrder} onClose={() => setViewOrder(null)} onPrint={handlePrint} />
-      <NewOrderModal isOpen={showNew} onClose={() => setShowNew(false)} onPlace={handlePlaceOrder} products={products} />
+      <NewOrderModal isOpen={showNew} onClose={() => setShowNew(false)} onPlace={handlePlaceOrder} products={products} shops={shops} />
       <EditOrderModal isOpen={!!editOrder} order={editOrder} onClose={() => setEditOrder(null)} onSave={handleEditSave} products={products} />
 
       <style>{`

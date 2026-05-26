@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { INITIAL_PRODUCTS } from '../dashboard/ProductManagement'
-import { INITIAL_SHOPS } from '../dashboard/ShopsManagement'
+import { useGetProductsQuery } from '../../store/slices/productsApiSlice'
 
 const fmtOrderId = id => {
   if (!id) return '—'
@@ -20,6 +19,8 @@ function timeLeft(createdAt) {
 
 /* ─── Edit Order Modal ─── */
 function EditModal({ order, onClose, onSave }) {
+  const { data: products = [], isLoading } = useGetProductsQuery()
+
   const [cart, setCart] = useState(
     Object.fromEntries(order.products.map(p => [p.id, p.qty]))
   )
@@ -28,11 +29,22 @@ function EditModal({ order, onClose, onSave }) {
   const [searchP, setSearchP] = useState('')
   const [selCat, setSelCat] = useState('All')
 
-  const products = INITIAL_PRODUCTS
   const categories = ['All', ...Array.from(new Set(products.map(p => p.cat)))]
   const total = products.reduce((s, p) => s + (cart[p.id] || 0) * p.selling, 0)
   const advAmt = payment === 'Udaar' ? (Number(advance) || 0) : 0
   const baki = Math.max(0, total - advAmt)
+
+  if (isLoading) {
+    return (
+      <div onClick={e => { if (e.target === e.currentTarget) onClose() }} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(4px)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ background: '#fff', borderRadius: '16px', padding: '40px', textAlign: 'center', boxShadow: '0 24px 64px rgba(0,0,0,.18)' }}>
+          <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid #e2e8f0', borderTopColor: '#0ea5e9', animation: 'spin 1s linear infinite', margin: '0 auto 12px' }} />
+          <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}>Products load ho rahe hain...</div>
+          <style>{`@keyframes spin{to{transform:rotate(360deg);}}`}</style>
+        </div>
+      </div>
+    )
+  }
   const cartCount = Object.values(cart).reduce((s, q) => s + q, 0)
 
   const filteredProds = products.filter(p => {

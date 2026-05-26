@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useOutletContext, useNavigate } from 'react-router-dom'
-import { INITIAL_PRODUCTS } from '../dashboard/ProductManagement'
-import { INITIAL_SHOPS } from '../dashboard/ShopsManagement'
+import { useGetShopsQuery } from '../../store/slices/shopsApiSlice'
+import { useGetProductsQuery } from '../../store/slices/productsApiSlice'
 
 const fmt = n => 'Rs ' + Number(n).toLocaleString('en-PK')
 
@@ -100,6 +100,9 @@ export default function SalesmanOrder() {
   const { user, isMobile } = useOutletContext() || {}
   const navigate = useNavigate()
 
+  const { data: dbShops = [], isLoading: isLoadingShops } = useGetShopsQuery()
+  const { data: dbProducts = [], isLoading: isLoadingProds } = useGetProductsQuery()
+
   const [step, setStep] = useState(0)
   const [selectedShop, setSelectedShop] = useState(null)
   const [cart, setCart] = useState({})
@@ -116,9 +119,9 @@ export default function SalesmanOrder() {
   const [prodSearch, setProdSearch] = useState('')
   const [selCat, setSelCat] = useState('All')
 
-  const baseShops = INITIAL_SHOPS.filter(s => s.status === 'active')
+  const baseShops = dbShops.filter(s => s.status === 'active')
   const allShops = [...baseShops, ...extraShops]
-  const products = INITIAL_PRODUCTS
+  const products = dbProducts
   const categories = ['All', ...Array.from(new Set(products.map(p => p.cat)))]
 
   const filteredShops = allShops.filter(s => {
@@ -183,6 +186,16 @@ export default function SalesmanOrder() {
     }
     localStorage.setItem('salesman_orders', JSON.stringify([...existing, order]))
     setSubmitted(true)
+  }
+
+  if (isLoadingShops || isLoadingProds) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', gap: '12px' }}>
+        <div style={{ width: '40px', height: '40px', borderRadius: '50%', border: '4px solid #e2e8f0', borderTopColor: '#0ea5e9', animation: 'spin 1s linear infinite' }} />
+        <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}>Loading active products and shops...</div>
+        <style>{`@keyframes spin{to{transform:rotate(360deg);}}`}</style>
+      </div>
+    )
   }
 
   if (submitted) {

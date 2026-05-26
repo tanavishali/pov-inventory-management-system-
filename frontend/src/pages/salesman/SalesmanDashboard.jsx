@@ -1,6 +1,6 @@
 import { useOutletContext, useNavigate } from 'react-router-dom'
-import { INITIAL_PRODUCTS } from '../dashboard/ProductManagement'
-import { INITIAL_SHOPS } from '../dashboard/ShopsManagement'
+import { useGetShopsQuery } from '../../store/slices/shopsApiSlice'
+import { useGetProductsQuery } from '../../store/slices/productsApiSlice'
 
 const fmt = n => 'Rs ' + Number(n).toLocaleString('en-PK')
 
@@ -35,18 +35,31 @@ export default function SalesmanDashboard() {
     try { return JSON.parse(localStorage.getItem('salesman_orders') || '[]') } catch { return [] }
   })()
 
+  const { data: dbShops = [], isLoading: isLoadingShops } = useGetShopsQuery()
+  const { data: dbProducts = [], isLoading: isLoadingProds } = useGetProductsQuery()
+
+  if (isLoadingShops || isLoadingProds) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '60px 20px', gap: '12px' }}>
+        <div style={{ width: '40px', height: '40px', borderRadius: '50%', border: '4px solid #e2e8f0', borderTopColor: '#0ea5e9', animation: 'spin 1s linear infinite' }} />
+        <div style={{ fontSize: '13px', color: '#94a3b8', fontWeight: 600 }}>Loading dashboard statistics...</div>
+        <style>{`@keyframes spin{to{transform:rotate(360deg);}}`}</style>
+      </div>
+    )
+  }
+
   const myOrders = orders.filter(o => o.salesmanEmail === user?.email)
   const totalSales = myOrders.filter(o => o.status !== 'cancelled').reduce((s, o) => s + (o.total || 0), 0)
   const udaarOrders = myOrders.filter(o => o.payment === 'Udaar')
   const totalUdaar = udaarOrders.reduce((s, o) => s + Math.max(0, (o.total || 0) - (o.advance || 0)), 0)
-  const lowStock = INITIAL_PRODUCTS.filter(p => p.stock === 0 || p.stock <= p.threshold)
-  const activeShops = INITIAL_SHOPS.filter(s => s.status === 'active')
+  const lowStock = dbProducts.filter(p => p.stock === 0 || p.stock <= p.threshold)
+  const activeShops = dbShops.filter(s => s.status === 'active')
 
   const stats = [
     { icon: 'chart-line',          label: 'My Total Sales',    value: fmt(totalSales),            color: '#0ea5e9', bg: '#e0f2fe',   sub: `${myOrders.length} orders placed` },
     { icon: 'cart-shopping',       label: 'Total Orders',      value: myOrders.length,            color: '#6366f1', bg: '#ede9fe',   sub: 'By me' },
     { icon: 'store',               label: 'Active Shops',      value: activeShops.length,         color: '#10b981', bg: '#dcfce7',   sub: 'Available shops' },
-    { icon: 'box-open',            label: 'Total Products',    value: INITIAL_PRODUCTS.length,    color: '#f59e0b', bg: '#fef9c3',   sub: `${lowStock.length} low stock` },
+    { icon: 'box-open',            label: 'Total Products',    value: dbProducts.length,          color: '#f59e0b', bg: '#fef9c3',   sub: `${lowStock.length} low stock` },
     { icon: 'hand-holding-dollar', label: 'Total Udaar Due',   value: fmt(totalUdaar),            color: '#ef4444', bg: '#fee2e2',   sub: `${udaarOrders.length} udaar orders` },
   ]
 

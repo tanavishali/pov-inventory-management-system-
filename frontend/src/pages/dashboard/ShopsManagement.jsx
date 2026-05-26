@@ -1,14 +1,13 @@
 import { useState, useMemo } from 'react'
+import {
+  useGetShopsQuery,
+  useCreateShopMutation,
+  useUpdateShopMutation,
+  useDeleteShopMutation,
+} from '../../store/slices/shopsApiSlice';
 
-/* ─── Initial Data ─── */
-export const INITIAL_SHOPS = [
-  { id: 1, name: 'Hassan Electronics Store', owner: 'Ali Hassan',   phone: '+92 300 1234567', cnic: '42101-1234567-1', address: 'Main Market, Mall Road',    city: 'Lahore',     status: 'active',  created: '2024-01-15' },
-  { id: 2, name: 'Sana General Store',        owner: 'Sana Bibi',    phone: '+92 321 9876543', cnic: '42201-9876543-2', address: 'Block B, Model Town',       city: 'Lahore',     status: 'active',  created: '2024-02-20' },
-  { id: 3, name: 'Khan Brothers Depot',       owner: 'Zubair Khan',  phone: '+92 333 5556677', cnic: '54301-5556677-3', address: 'GT Road, Near Toll Plaza',   city: 'Gujranwala', status: 'active',  created: '2024-03-10' },
-  { id: 4, name: 'City Wholesale Market',     owner: 'Kamran Malik', phone: '+92 345 1112233', cnic: '35202-1112233-4', address: 'Circular Road, Saddar',      city: 'Rawalpindi', status: 'blocked', created: '2023-11-05' },
-  { id: 5, name: 'Raza Trading Co.',          owner: 'Abdul Raza',   phone: '+92 311 7778899', cnic: '42101-7778899-5', address: 'Urdu Bazar, Old City',       city: 'Lahore',     status: 'active',  created: '2024-04-01' },
-  { id: 6, name: 'Al-Noor Provisions',        owner: 'Noor ul Haq',  phone: '+92 312 4445566', cnic: '42201-4445566-6', address: 'Link Road, Gulshan Iqbal',   city: 'Karachi',    status: 'blocked', created: '2023-09-22' },
-]
+/* ─── Initial Data (compatibility export) ─── */
+export const INITIAL_SHOPS = [];
 
 /* ─── Stat Card ─── */
 function StatCard({ borderColor, iconBg, iconColor, icon, bgIcon, bgIconColor, label, value, sub }) {
@@ -80,10 +79,10 @@ function ShopCard({ shop, onView, onEdit, onToggleBlock, onDelete }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '7px', marginBottom: '12px' }}>
           {[
             { icon: 'fa-phone',        text: shop.phone },
-            { icon: 'fa-id-card',      text: <><strong>CNIC:</strong> {shop.cnic}</> },
-            { icon: 'fa-location-dot', text: <><strong>Address:</strong> {shop.address}</> },
-            { icon: 'fa-city',         text: <><strong>City:</strong> {shop.city}</> },
-            { icon: 'fa-regular fa-calendar', text: <><strong>Created:</strong> {shop.created}</> },
+            { icon: 'fa-id-card',      text: <><strong>CNIC:</strong> {shop.cnic || '—'}</> },
+            { icon: 'fa-location-dot', text: <><strong>Address:</strong> {shop.address || '—'}</> },
+            { icon: 'fa-city',         text: <><strong>City:</strong> {shop.city || '—'}</> },
+            { icon: 'fa-regular fa-calendar', text: <><strong>Created:</strong> {shop.created || '—'}</> },
           ].map((row, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', fontSize: '12.5px', color: '#475569' }}>
               <i className={`fa-solid ${row.icon}`} style={{ width: '15px', textAlign: 'center', color: '#94a3b8', fontSize: '12px', marginTop: '1px', flexShrink: 0 }} />
@@ -173,7 +172,11 @@ function ModalInput({ label, icon, ...props }) {
 
 /* ─── Main Component ─── */
 export default function ShopsManagement() {
-  const [shops, setShops] = useState(INITIAL_SHOPS)
+  const { data: shops = [], isLoading, isError, refetch } = useGetShopsQuery();
+  const [createShop] = useCreateShopMutation();
+  const [updateShop] = useUpdateShopMutation();
+  const [deleteShop] = useDeleteShopMutation();
+
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
 
@@ -211,7 +214,7 @@ export default function ShopsManagement() {
 
   function openEdit(shop) {
     setEditShop(shop)
-    setForm({ name: shop.name, owner: shop.owner, phone: shop.phone, cnic: shop.cnic, address: shop.address, city: shop.city, status: shop.status })
+    setForm({ name: shop.name, owner: shop.owner, phone: shop.phone, cnic: shop.cnic || '', address: shop.address || '', city: shop.city || '', status: shop.status })
     setFormError('')
     setShopModal(true)
   }
@@ -221,31 +224,51 @@ export default function ShopsManagement() {
     setViewModal(true)
   }
 
-  function confirmShop() {
+  async function confirmShop() {
     if (!form.name.trim() || !form.owner.trim() || !form.phone.trim()) {
       setFormError('Shop name, owner name and phone are required.')
       return
     }
     setFormError('')
-    if (editShop) {
-      setShops(prev => prev.map(s => s.id === editShop.id ? { ...s, ...form } : s))
-    } else {
-      const newId = shops.length ? Math.max(...shops.map(s => s.id)) + 1 : 1
-      const today = new Date().toISOString().split('T')[0]
-      setShops(prev => [...prev, { id: newId, ...form, created: today }])
+    try {
+      if (editShop) {
+        await updateShop({ id: editShop.id, ...form }).unwrap();
+      } else {
+        await createShop(form).unwrap();
+      }
+      setShopModal(false)
+    } catch (err) {
+      console.error(err)
+      setFormError(err?.data?.message || 'Error occurred while saving customer shop.')
     }
-    setShopModal(false)
   }
 
-  function toggleBlock(shop) {
+  async function toggleBlock(shop) {
     const action = shop.status === 'active' ? 'block' : 'unblock'
     if (!confirm(`Are you sure you want to ${action} "${shop.name}"?`)) return
-    setShops(prev => prev.map(s => s.id === shop.id ? { ...s, status: s.status === 'active' ? 'blocked' : 'active' } : s))
+    try {
+      const nextStatus = shop.status === 'active' ? 'blocked' : 'active';
+      await updateShop({ id: shop.id, status: nextStatus }).unwrap();
+      if (viewShopData?.id === shop.id) {
+        setViewShopData(prev => ({ ...prev, status: nextStatus }));
+      }
+    } catch (err) {
+      console.error(err)
+      alert('Error updating status.')
+    }
   }
 
-  function deleteShop(shop) {
+  async function handleDeleteShop(shop) {
     if (!confirm(`Delete "${shop.name}"? This cannot be undone.`)) return
-    setShops(prev => prev.filter(s => s.id !== shop.id))
+    try {
+      await deleteShop(shop.id).unwrap();
+      if (viewShopData?.id === shop.id) {
+        setViewModal(false)
+      }
+    } catch (err) {
+      console.error(err)
+      alert('Error deleting shop.')
+    }
   }
 
   const filterBtns = [
@@ -253,6 +276,30 @@ export default function ShopsManagement() {
     { key: 'active',  label: 'Active',  icon: 'circle-check', iconColor: '#10b981' },
     { key: 'blocked', label: 'Blocked', icon: 'ban',          iconColor: '#ef4444' },
   ]
+
+  // Loading state UI
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '14px' }}>
+        <div style={{ width: '48px', height: '48px', borderRadius: '50%', border: '4px solid #e2e8f0', borderTopColor: '#0ea5e9', animation: 'spin 1s linear infinite' }} />
+        <div style={{ fontSize: '14px', color: '#64748b', fontWeight: 600 }}>Shops load ho rahi hain...</div>
+        <style>{`@keyframes spin{to{transform:rotate(360deg);}}`}</style>
+      </div>
+    )
+  }
+
+  // Error state UI
+  if (isError) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', gap: '14px' }}>
+        <i className="fa-solid fa-circle-exclamation" style={{ fontSize: '48px', color: '#ef4444' }} />
+        <div style={{ fontSize: '15px', color: '#dc2626', fontWeight: 700 }}>Shops load karne mein error aaya</div>
+        <button onClick={refetch} style={{ padding: '9px 18px', borderRadius: '9px', background: '#0ea5e9', color: '#fff', border: 'none', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}>
+          Retry
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -375,7 +422,7 @@ export default function ShopsManagement() {
               onView={openView}
               onEdit={openEdit}
               onToggleBlock={toggleBlock}
-              onDelete={deleteShop}
+              onDelete={handleDeleteShop}
             />
           ))}
         </div>
