@@ -4,6 +4,7 @@ import Sidebar from '../components/dashboard/Sidebar'
 import Topbar from '../components/dashboard/Topbar'
 import { INITIAL_PRODUCTS } from './dashboard/ProductManagement'
 import { INITIAL_ORDERS } from './dashboard/OrderManagement'
+import { useGetOrdersQuery } from '../store/slices/ordersApiSlice'
 
 const routeToNav = {
   '/dashboard': 'Dashboard',
@@ -49,15 +50,18 @@ export default function DashboardLayout({ user, onLogout }) {
     })
   }
 
-  const [sharedOrders, setSharedOrders] = useState(() => {
+  const { data: dbOrders = [] } = useGetOrdersQuery()
+  const [sharedOrders, setSharedOrders] = useState([])
+
+  useEffect(() => {
     try {
       const salesmanOrders = JSON.parse(localStorage.getItem('salesman_orders') || '[]')
-      const normalized = normalizeSalesmanOrders(salesmanOrders, INITIAL_ORDERS)
-      return [...INITIAL_ORDERS, ...normalized]
+      const normalized = normalizeSalesmanOrders(salesmanOrders, dbOrders)
+      setSharedOrders([...dbOrders, ...normalized])
     } catch {
-      return INITIAL_ORDERS
+      setSharedOrders(dbOrders)
     }
-  })
+  }, [dbOrders])
 
   // Sync salesman orders when localStorage changes (cross-tab support)
   useEffect(() => {

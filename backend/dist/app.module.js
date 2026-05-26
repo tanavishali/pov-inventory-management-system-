@@ -17,6 +17,7 @@ const users_module_1 = require("./users/users.module");
 const super_admin_controller_1 = require("./super-admin/super-admin.controller");
 const payments_module_1 = require("./payments/payments.module");
 const products_module_1 = require("./products/products.module");
+const orders_module_1 = require("./orders/orders.module");
 const core_1 = require("@nestjs/core");
 const jwt_auth_guard_1 = require("./auth/guards/jwt-auth.guard");
 let AppModule = class AppModule {
@@ -39,6 +40,7 @@ exports.AppModule = AppModule = __decorate([
             users_module_1.UsersModule,
             payments_module_1.PaymentsModule,
             products_module_1.ProductsModule,
+            orders_module_1.OrdersModule,
         ],
         controllers: [app_controller_1.AppController, super_admin_controller_1.SuperAdminController],
         providers: [

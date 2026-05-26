@@ -2,6 +2,12 @@ import { useState, useMemo, useRef } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { INITIAL_PRODUCTS } from './ProductManagement'
 import { INITIAL_SHOPS } from './ShopsManagement'
+import { useGetProductsQuery } from '../../store/slices/productsApiSlice'
+import {
+  useCreateOrderMutation,
+  useUpdateOrderMutation,
+  useDeleteOrderMutation
+} from '../../store/slices/ordersApiSlice'
 
 /* ─── Constants ─── */
 const STATUS_LABELS = {
@@ -20,62 +26,7 @@ const STATUS_COLORS = {
   cancelled: { strip: '#ef4444', badge: { bg: '#fee2e2', color: '#dc2626' }, count: { bg: '#fee2e2', color: '#dc2626' } },
 }
 
-export const INITIAL_ORDERS = [
-  {
-    id: 'INV-001', status: 'pending',
-    customer: 'Ali Hassan', shop: 'Al-Noor Store', salesman: 'Usman Farooq',
-    payment: 'Udaar', advance: 5000, date: '01 Mar 2026', time: '10:30 AM',
-    products: [
-      { name: 'Basmati Rice 5kg', qty: 10, price: 2200, ctn: 2 },
-      { name: 'Cooking Oil 5L',   qty: 5,  price: 2600, ctn: 1 },
-    ],
-  },
-  {
-    id: 'INV-002', status: 'pending',
-    customer: 'Rehman Bros', shop: 'Rehman Store', salesman: 'Asif Iqbal',
-    payment: 'Paid', advance: 0, date: '01 Mar 2026', time: '11:15 AM',
-    products: [
-      { name: 'Sugar 50kg Bag', qty: 2, price: 6200, ctn: 1 },
-      { name: 'Flour 10kg',     qty: 8, price: 1750, ctn: 2 },
-    ],
-  },
-  {
-    id: 'INV-003', status: 'approved',
-    customer: 'Sana Traders', shop: 'Sana Mart', salesman: 'Kamran Shah',
-    payment: 'Paid', advance: 0, date: '28 Feb 2026', time: '09:00 AM',
-    products: [
-      { name: 'Detergent 1kg',   qty: 20, price: 480, ctn: 4 },
-      { name: 'Soap Bar x6',     qty: 15, price: 360, ctn: 3 },
-      { name: 'Shampoo 200ml',   qty: 10, price: 280, ctn: 2 },
-    ],
-  },
-  {
-    id: 'INV-004', status: 'dispatched',
-    customer: 'Khan Brothers', shop: 'Khan & Co.', salesman: 'Usman Farooq',
-    payment: 'Paid', advance: 0, date: '27 Feb 2026', time: '02:45 PM',
-    products: [
-      { name: 'Tea Leaves 1kg',   qty: 12, price: 1600, ctn: 3 },
-      { name: 'Milk Powder 400g', qty: 8,  price: 1150, ctn: 2 },
-    ],
-  },
-  {
-    id: 'INV-005', status: 'completed',
-    customer: 'City Wholesale', shop: 'City Store', salesman: 'Asif Iqbal',
-    payment: 'Udaar', advance: 20000, date: '25 Feb 2026', time: '04:00 PM',
-    products: [
-      { name: 'Basmati Rice 5kg', qty: 20, price: 2200, ctn: 4 },
-      { name: 'Sugar 50kg Bag',   qty: 5,  price: 6200, ctn: 2 },
-    ],
-  },
-  {
-    id: 'INV-006', status: 'cancelled',
-    customer: 'Raza Wholesale', shop: 'Raza Depot', salesman: 'Kamran Shah',
-    payment: 'Paid', advance: 0, date: '24 Feb 2026', time: '01:00 PM',
-    products: [
-      { name: 'Lemon Juice 500ml', qty: 24, price: 310, ctn: 4 },
-    ],
-  },
-]
+export const INITIAL_ORDERS = []
 
 const fmt = n => '₨' + Number(n).toLocaleString('en-PK')
 const orderTotal = o => o.products.reduce((s, p) => s + p.qty * p.price, 0)
@@ -357,7 +308,7 @@ function ViewModal({ order, onClose, onPrint }) {
 }
 
 /* ─── New Order Modal ─── */
-function NewOrderModal({ isOpen, onClose, onPlace }) {
+function NewOrderModal({ isOpen, onClose, onPlace, products = [] }) {
   const [customer, setCustomer] = useState('')
   const [shop, setShop] = useState('')
   const [phone, setPhone] = useState('')
@@ -371,11 +322,10 @@ function NewOrderModal({ isOpen, onClose, onPlace }) {
   const [custSuggestions, setCustSuggestions] = useState([])
   const nextId = useRef(2)
 
-  const ORDER_CATEGORIES = [
-    'Grains', 'Spices', 'Oil & Ghee', 'Snacks', 'Beverages',
-    'Sweets', 'Cleaning', 'Personal Care', 'Packed Food',
-    'Baby Products', 'Dairy', 'Frozen',
-  ]
+  const ORDER_CATEGORIES = useMemo(() => {
+    const cats = products.map(p => p.cat).filter(Boolean)
+    return [...new Set(cats)].sort()
+  }, [products])
 
   const addRow = () => setRows(r => [...r, { id: nextId.current++, name: '', qty: 1, price: 0, ctn: '' }])
   const removeRow = id => { setRows(r => r.filter(x => x.id !== id)); if (prodSuggestions.id === id) setProdSuggestions({ id: null, list: [] }) }
@@ -404,14 +354,14 @@ function NewOrderModal({ isOpen, onClose, onPlace }) {
     updateRow(rowId, 'name', val)
     if (val.trim().length < 1) {
       if (category) {
-        const catMatches = INITIAL_PRODUCTS.filter(p => p.cat === category).slice(0, 6)
+        const catMatches = products.filter(p => p.cat === category).slice(0, 6)
         setProdSuggestions({ id: rowId, list: catMatches })
       } else {
         setProdSuggestions({ id: null, list: [] })
       }
       return
     }
-    const matches = INITIAL_PRODUCTS.filter(p => {
+    const matches = products.filter(p => {
       const nameMatch = p.name.toLowerCase().includes(val.toLowerCase())
       const catMatch = !category || p.cat === category
       return nameMatch && catMatch
@@ -693,7 +643,7 @@ function NewOrderModal({ isOpen, onClose, onPlace }) {
 
 
 /* ─── EDIT ORDER MODAL ─── */
-function EditOrderModal({ isOpen, order, onClose, onSave }) {
+function EditOrderModal({ isOpen, order, onClose, onSave, products = [] }) {
   const [customer, setCustomer] = useState('')
   const [shop, setShop] = useState('')
   const [salesman, setSalesman] = useState('')
@@ -727,7 +677,7 @@ function EditOrderModal({ isOpen, order, onClose, onSave }) {
   const handleProductSearch = (rowId, val) => {
     updateRow(rowId, 'name', val)
     if (val.trim().length < 1) { setSuggestions({ id: null, list: [] }); return }
-    const matches = INITIAL_PRODUCTS.filter(p => p.name.toLowerCase().includes(val.toLowerCase())).slice(0, 6)
+    const matches = products.filter(p => p.name.toLowerCase().includes(val.toLowerCase())).slice(0, 6)
     setSuggestions({ id: rowId, list: matches })
   }
 
@@ -1089,6 +1039,67 @@ function InvoiceModal({ order, onClose, onPrint }) {
   )
 }
 
+/* ─── Salesman Orders Offline Sync Helpers ─── */
+const updateSalesmanOrder = (id, updatedFields) => {
+  try {
+    const salesmanOrders = JSON.parse(localStorage.getItem('salesman_orders') || '[]')
+    const invSettings = (() => { try { return JSON.parse(localStorage.getItem('wholesale_inv') || '{}') } catch { return {} } })()
+    const prefix = invSettings.prefix || 'INV-'
+    const usedNums = salesmanOrders.map(o => { const n = parseInt((o.adminId || o.id || '').replace(/[^0-9]/g, '')); return isNaN(n) ? 0 : n }).filter(n => n > 0)
+    let counter = usedNums.length ? Math.max(...usedNums) : 0
+    
+    const normalized = salesmanOrders.map(o => {
+      const adminId = o.adminId || (() => { counter++; return prefix + String(counter).padStart(3, '0') })()
+      return { ...o, adminId }
+    })
+    
+    const targetIndex = normalized.findIndex(o => o.adminId === id || o.id === id)
+    if (targetIndex !== -1) {
+      const originalOrder = salesmanOrders[targetIndex]
+      const updatedNormalized = normalized[targetIndex]
+      
+      const nextOrder = {
+        ...originalOrder,
+        adminId: updatedNormalized.adminId,
+        ...updatedFields
+      }
+      
+      if (updatedFields.customer !== undefined) nextOrder.shopOwner = updatedFields.customer
+      if (updatedFields.shop !== undefined) nextOrder.shopName = updatedFields.shop
+      if (updatedFields.salesman !== undefined) nextOrder.salesmanName = updatedFields.salesman
+      
+      salesmanOrders[targetIndex] = nextOrder
+      localStorage.setItem('salesman_orders', JSON.stringify(salesmanOrders))
+      window.dispatchEvent(new Event('storage'))
+    }
+  } catch (e) {
+    console.error('Error updating salesman order', e)
+  }
+}
+
+const deleteSalesmanOrder = (id) => {
+  try {
+    const salesmanOrders = JSON.parse(localStorage.getItem('salesman_orders') || '[]')
+    const invSettings = (() => { try { return JSON.parse(localStorage.getItem('wholesale_inv') || '{}') } catch { return {} } })()
+    const prefix = invSettings.prefix || 'INV-'
+    const usedNums = salesmanOrders.map(o => { const n = parseInt((o.adminId || o.id || '').replace(/[^0-9]/g, '')); return isNaN(n) ? 0 : n }).filter(n => n > 0)
+    let counter = usedNums.length ? Math.max(...usedNums) : 0
+    
+    const normalized = salesmanOrders.map(o => {
+      const adminId = o.adminId || (() => { counter++; return prefix + String(counter).padStart(3, '0') })()
+      return { ...o, adminId }
+    })
+    
+    const targetIndex = normalized.findIndex(o => o.adminId === id || o.id === id)
+    if (targetIndex !== -1) {
+      salesmanOrders.splice(targetIndex, 1)
+      localStorage.setItem('salesman_orders', JSON.stringify(salesmanOrders))
+      window.dispatchEvent(new Event('storage'))
+    }
+  } catch (e) {
+    console.error('Error deleting salesman order', e)
+  }
+}
 
 /* ─── MAIN COMPONENT ─── */
 export default function OrderManagement() {
@@ -1096,6 +1107,11 @@ export default function OrderManagement() {
   const orders = ctx.sharedOrders ?? INITIAL_ORDERS
   const setOrders = ctx.setSharedOrders ?? (() => {})
   const isMobile = ctx.isMobile ?? false
+
+  const { data: products = [] } = useGetProductsQuery()
+  const [createOrder] = useCreateOrderMutation()
+  const [updateOrder] = useUpdateOrderMutation()
+  const [deleteOrder] = useDeleteOrderMutation()
 
   const getBiz = () => { try { return JSON.parse(localStorage.getItem('wholesale_biz') || '{}') } catch { return {} } }
   const bizName    = getBiz().name    || 'WholesalePro'
@@ -1140,38 +1156,66 @@ export default function OrderManagement() {
   }, [activeOrders, activeTab, search, sort])
 
   /* Handlers */
-  const handleEditSave = (updated) => {
-    setOrders(prev => prev.map(o => o.id === updated.id ? updated : o))
-    if (viewOrder?.id === updated.id) setViewOrder(updated)
+  const handleEditSave = async (updated) => {
+    if (updated._fromSalesman) {
+      updateSalesmanOrder(updated.id, updated)
+      if (viewOrder?.id === updated.id) setViewOrder(updated)
+    } else {
+      try {
+        await updateOrder({ id: updated.id, ...updated }).unwrap()
+        if (viewOrder?.id === updated.id) setViewOrder(updated)
+      } catch (err) {
+        console.error('Failed to update order:', err)
+        alert(err?.data?.message || 'Order update karne mein error aaya.')
+      }
+    }
   }
 
-  const handleChangeStatus = (id, newStatus) => {
+  const handleChangeStatus = async (id, newStatus) => {
     const o = orders.find(x => x.id === id)
+    if (!o) return
     if (!window.confirm(`Change order ${o.id} to "${STATUS_LABELS[newStatus]}"?`)) return
-    setOrders(prev => prev.map(x => x.id === id ? { ...x, status: newStatus } : x))
-    if (viewOrder?.id === id) setViewOrder(prev => ({ ...prev, status: newStatus }))
+    
+    if (o._fromSalesman) {
+      updateSalesmanOrder(id, { status: newStatus })
+      if (viewOrder?.id === id) setViewOrder(prev => ({ ...prev, status: newStatus }))
+    } else {
+      try {
+        await updateOrder({ id, status: newStatus }).unwrap()
+        if (viewOrder?.id === id) setViewOrder(prev => ({ ...prev, status: newStatus }))
+      } catch (err) {
+        console.error('Failed to update status:', err)
+        alert(err?.data?.message || 'Status change karne mein error aaya.')
+      }
+    }
   }
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     const o = orders.find(x => x.id === id)
+    if (!o) return
     if (!window.confirm(`Order ${o.id} permanently delete karna chahte hain? Yeh wapas nahi aayega.`)) return
-    setOrders(prev => prev.filter(x => x.id !== id))
-    if (viewOrder?.id === id) setViewOrder(null)
+    
+    if (o._fromSalesman) {
+      deleteSalesmanOrder(id)
+      if (viewOrder?.id === id) setViewOrder(null)
+    } else {
+      try {
+        await deleteOrder(id).unwrap()
+        if (viewOrder?.id === id) setViewOrder(null)
+      } catch (err) {
+        console.error('Failed to delete order:', err)
+        alert(err?.data?.message || 'Order delete karne mein error aaya.')
+      }
+    }
   }
 
-  const handlePlaceOrder = (data) => {
-    // Read prefix from Settings
-    const invSettings = (() => { try { return JSON.parse(localStorage.getItem('wholesale_inv') || '{}') } catch { return {} } })()
-    const prefix = invSettings.prefix || 'INV-'
-    // Find highest numeric order ID across all orders
-    const numericIds = orders
-      .map(o => { const n = parseInt(o.id.replace(/[^0-9]/g, '')); return isNaN(n) ? 0 : n; })
-      .filter(n => n >= 1)
-    const nextNum = numericIds.length ? Math.max(...numericIds) + 1 : 1
-    const now = new Date()
-    const dateStr = now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-    const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
-    setOrders(prev => [...prev, { id: prefix + String(nextNum).padStart(3, '0'), status: 'pending', date: dateStr, time: timeStr, advance: data.advance || 0, ...data }])
+  const handlePlaceOrder = async (data) => {
+    try {
+      await createOrder(data).unwrap()
+    } catch (err) {
+      console.error('Failed to place order:', err)
+      alert(err?.data?.message || 'Order place karne mein error aaya.')
+    }
   }
 
   const buildInvoiceHTML = (order) => {
@@ -1515,8 +1559,8 @@ export default function OrderManagement() {
 
       {/* Modals */}
       <ViewModal order={viewOrder} onClose={() => setViewOrder(null)} onPrint={handlePrint} />
-      <NewOrderModal isOpen={showNew} onClose={() => setShowNew(false)} onPlace={handlePlaceOrder} />
-      <EditOrderModal isOpen={!!editOrder} order={editOrder} onClose={() => setEditOrder(null)} onSave={handleEditSave} />
+      <NewOrderModal isOpen={showNew} onClose={() => setShowNew(false)} onPlace={handlePlaceOrder} products={products} />
+      <EditOrderModal isOpen={!!editOrder} order={editOrder} onClose={() => setEditOrder(null)} onSave={handleEditSave} products={products} />
 
       <style>{`
         @media(max-width:768px){
