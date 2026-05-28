@@ -1,32 +1,23 @@
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { buildInvoiceHTML } from './InvoiceSystem'
+import {
+  useGetShopsQuery,
+  useCreateShopMutation,
+  useUpdateShopMutation,
+  useDeleteShopMutation,
+} from '../../store/slices/shopsApiSlice';
+import {
+  useGetUdharQuery,
+  useCreateUdharMutation,
+  useUpdateUdharMutation,
+  useDeleteUdharMutation,
+} from '../../store/slices/udharApiSlice';
+import { useGetProductsQuery } from '../../store/slices/productsApiSlice';
 
 /* ══════════════════════════════════════
    INITIAL DATA
 ══════════════════════════════════════ */
-const INIT_SHOPS = [
-  { id: 1, shopName: 'Hassan Electronics', ownerName: 'Ali Hassan', phone: '+92-300-1234567' },
-  { id: 2, shopName: 'Sana General Store',  ownerName: 'Sara Ahmed',  phone: '+92-301-2345678' },
-]
-
-const PRODUCTS_LIST = [
-  { name: 'Rice (50kg)',      price: 4500 },
-  { name: 'Sugar (50kg)',     price: 5200 },
-  { name: 'Flour (20kg)',     price: 1800 },
-  { name: 'Cooking Oil (5L)', price: 1250 },
-  { name: 'Tea (1kg)',        price: 850  },
-]
-
-const INIT_LEDGER = [
-  { shopId: 1, entries: [
-    { id: 101, date: '2024-02-01', type: 'udhar',   desc: 'Order #1001', products: [{ name: 'Rice (50kg)', qty: 2, price: 4500 }], total: 9000, advance: 1000, udharAmt: 8000 },
-    { id: 102, date: '2024-02-10', type: 'payment', desc: 'Cash received', products: [], total: 0, advance: 0, udharAmt: -3000 },
-  ]},
-  { shopId: 2, entries: [
-    { id: 201, date: '2024-02-05', type: 'udhar', desc: 'Order #1002', products: [{ name: 'Flour (20kg)', qty: 2, price: 1800 }, { name: 'Tea (1kg)', qty: 5, price: 850 }], total: 7850, advance: 500, udharAmt: 7350 },
-  ]},
-]
 
 /* ══════════════════════════════════════
    HELPERS
@@ -313,14 +304,14 @@ function EntryCard({ entry, onEdit, onDelete }) {
         </div>
         <div style={{ display: 'flex', gap: '6px' }}>
           {!isPay && (
-            <button onClick={() => onEdit(entry.id)} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', borderRadius: '7px', border: 'none', background: '#e0f2fe', color: '#0369a1', fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans',sans-serif" }}
+            <button onClick={() => onEdit(entry._id || entry.id)} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', borderRadius: '7px', border: 'none', background: '#e0f2fe', color: '#0369a1', fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans',sans-serif" }}
               onMouseEnter={e => e.currentTarget.style.background = '#bae6fd'}
               onMouseLeave={e => e.currentTarget.style.background = '#e0f2fe'}
             >
               <i className="fa-solid fa-pen-to-square" /> Edit
             </button>
           )}
-          <button onClick={() => onDelete(entry.id)} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', borderRadius: '7px', border: 'none', background: '#fee2e2', color: DANGER, fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans',sans-serif" }}
+          <button onClick={() => onDelete(entry._id || entry.id)} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '6px 10px', borderRadius: '7px', border: 'none', background: '#fee2e2', color: DANGER, fontSize: '12px', fontWeight: 600, cursor: 'pointer', fontFamily: "'Plus Jakarta Sans',sans-serif" }}
             onMouseEnter={e => e.currentTarget.style.background = '#fecaca'}
             onMouseLeave={e => e.currentTarget.style.background = '#fee2e2'}
           >
@@ -335,16 +326,16 @@ function EntryCard({ entry, onEdit, onDelete }) {
 /* ══════════════════════════════════════
    PRODUCT ROW (inside Udhar modal)
 ══════════════════════════════════════ */
-function ProductRow({ row, onChange, onDelete }) {
+function ProductRow({ row, onChange, onDelete, productsList = [] }) {
   const handleSelect = e => {
-    const selected = PRODUCTS_LIST.find(p => p.name === e.target.value)
+    const selected = productsList.find(p => p.name === e.target.value)
     onChange({ ...row, name: e.target.value, price: selected ? selected.price : row.price })
   }
   return (
     <div style={{ display: 'flex', gap: '6px', alignItems: 'center', marginBottom: '8px' }}>
       <select value={row.name} onChange={handleSelect} style={{ ...inputSt, flex: 2, minWidth: 0, padding: '9px 10px' }} onFocus={focIn} onBlur={focOut}>
         <option value="">-- Product --</option>
-        {PRODUCTS_LIST.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
+        {productsList.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
       </select>
       <input type="number" placeholder="Qty" min="1" value={row.qty}
         onChange={e => onChange({ ...row, qty: e.target.value })}
@@ -395,71 +386,94 @@ export default function UdharManagement() {
   const ctx = useOutletContext() || {}
   const sharedOrders = ctx.sharedOrders ?? []
 
-  /* ── State ── */
-  const [shops,  setShops]  = useState(INIT_SHOPS)
-  const [ledger, setLedger] = useState(INIT_LEDGER)
-  const [nextId, setNextId] = useState(300)
+  /* ── RTK Query ── */
+  const { data: dbShops = [], isLoading: isLoadingShops } = useGetShopsQuery()
+  const { data: dbLedger = [], isLoading: isLoadingLedger } = useGetUdharQuery()
+  const { data: dbProducts = [], isLoading: isLoadingProducts } = useGetProductsQuery()
+
+  const [createShop] = useCreateShopMutation()
+  const [updateShop] = useUpdateShopMutation()
+  const [deleteShop] = useDeleteShopMutation()
+
+  const [createUdhar] = useCreateUdharMutation()
+  const [updateUdhar] = useUpdateUdharMutation()
+  const [deleteUdhar] = useDeleteUdharMutation()
+
+  /* ── Derived Mapped State ── */
+  const shops = useMemo(() => {
+    return dbShops.map(s => ({
+      id: s.id,
+      _id: s._id,
+      shopName: s.name,
+      ownerName: s.owner,
+      phone: s.phone,
+      status: s.status,
+    }))
+  }, [dbShops])
+
+  const productsList = useMemo(() => {
+    return dbProducts.map(p => ({
+      name: p.name,
+      price: p.selling,
+    }))
+  }, [dbProducts])
+
+  const ledger = useMemo(() => {
+    const grouped = {}
+    dbLedger.forEach(entry => {
+      const cId = entry.customerId
+      if (!grouped[cId]) {
+        grouped[cId] = { shopId: cId, entries: [] }
+      }
+      grouped[cId].entries.push({
+        id: entry.id,
+        _id: entry._id,
+        date: entry.date,
+        type: entry.type,
+        desc: entry.desc,
+        products: entry.products || [],
+        total: entry.total || 0,
+        advance: entry.advance || 0,
+        udharAmt: entry.udharAmt,
+      })
+    })
+    return Object.values(grouped)
+  }, [dbLedger])
 
   // Sync Udaar orders from admin order panel into ledger
   useEffect(() => {
     const udaarOrders = sharedOrders.filter(o => o.payment === 'Udaar')
-    if (udaarOrders.length === 0) return
+    if (udaarOrders.length === 0 || isLoadingShops || isLoadingLedger || isLoadingProducts) return
 
-    setShops(prev => {
-      let updated = [...prev]
-      udaarOrders.forEach(order => {
-        const shopKey = order.shop || order.shopName || ''
-        const existing = updated.find(s => s.shopName.toLowerCase() === shopKey.toLowerCase())
-        if (!existing && shopKey) {
-          updated = [...updated, {
-            id: 'ord_' + order.id,
-            shopName: shopKey,
-            ownerName: order.customer || '',
-            phone: order.phone || '',
-            _fromOrder: true,
-          }]
-        }
+    udaarOrders.forEach(order => {
+      const shopKey = order.shop || order.shopName || ''
+      const shopRef = dbShops.find(s => s.name.toLowerCase() === shopKey.toLowerCase())
+      if (!shopRef) return
+
+      const entryId = 'sync_' + order.id
+      const alreadyHas = dbLedger.some(e => e.id === entryId)
+      if (alreadyHas) return
+
+      const total = order.products ? order.products.reduce((s, p) => s + p.qty * p.price, 0) : (order.total || 0)
+      const advAmt = order.advance || 0
+      const baki = Math.max(0, total - advAmt)
+      if (baki <= 0) return
+
+      const formattedDate = order.date ? order.date.replace(/(\d+) (\w+) (\d+)/, '$3-$2-$1').replace(/Jan/,'01').replace(/Feb/,'02').replace(/Mar/,'03').replace(/Apr/,'04').replace(/May/,'05').replace(/Jun/,'06').replace(/Jul/,'07').replace(/Aug/,'08').replace(/Sep/,'09').replace(/Oct/,'10').replace(/Nov/,'11').replace(/Dec/,'12') : todayStr()
+
+      createUdhar({
+        id: entryId,
+        customerId: shopRef.id,
+        date: formattedDate,
+        type: 'udhar',
+        desc: 'Order ' + order.id + (order.salesman ? ' — ' + order.salesman : ''),
+        products: order.products ? order.products.map(p => ({ name: p.name, qty: p.qty, price: p.price })) : [],
+        total,
+        advance: advAmt,
+        udharAmt: baki,
       })
-      return updated
     })
-
-    setLedger(prev => {
-      let updated = [...prev]
-      udaarOrders.forEach(order => {
-        const shopKey = order.shop || order.shopName || ''
-        const total = order.products ? order.products.reduce((s,p) => s + p.qty * p.price, 0) : (order.total || 0)
-        const advAmt = order.advance || 0
-        const baki = Math.max(0, total - advAmt)
-        if (baki <= 0) return
-
-        // Find or create ledger for this shop
-        const shopRef = INIT_SHOPS.find(s => s.shopName.toLowerCase() === shopKey.toLowerCase()) ||
-          { id: 'ord_' + order.id }
-        const shopId = shopRef.id
-
-        const entryId = 'sync_' + order.id
-        const existingLedger = updated.find(l => l.shopId === shopId)
-        const alreadyHas = existingLedger?.entries?.some(e => e.id === entryId)
-        if (alreadyHas) return
-
-        const newEntry = {
-          id: entryId,
-          date: order.date ? order.date.replace(/(\d+) (\w+) (\d+)/, '$3-$2-$1').replace(/Jan/,'01').replace(/Feb/,'02').replace(/Mar/,'03').replace(/Apr/,'04').replace(/May/,'05').replace(/Jun/,'06').replace(/Jul/,'07').replace(/Aug/,'08').replace(/Sep/,'09').replace(/Oct/,'10').replace(/Nov/,'11').replace(/Dec/,'12') : todayStr(),
-          type: 'udhar',
-          desc: 'Order ' + order.id + (order.salesman ? ' — ' + order.salesman : ''),
-          products: order.products ? order.products.map(p => ({ name: p.name, qty: p.qty, price: p.price })) : [],
-          total, advance: advAmt, udharAmt: baki,
-        }
-
-        if (existingLedger) {
-          updated = updated.map(l => l.shopId === shopId ? { ...l, entries: [...l.entries, newEntry] } : l)
-        } else {
-          updated = [...updated, { shopId, entries: [newEntry] }]
-        }
-      })
-      return updated
-    })
-  }, [sharedOrders])
+  }, [sharedOrders, dbShops, dbLedger, isLoadingShops, isLoadingLedger, isLoadingProducts, createUdhar])
 
   const [view,   setView]   = useState('list') // 'list' | 'detail'
   const [selId,  setSelId]  = useState(null)   // selected shop id
@@ -539,25 +553,42 @@ export default function UdharManagement() {
     if (!shopName.trim() || !ownerName.trim()) { setCustErr('Shop name aur owner name zaroor bharo!'); return }
     setCustErr('')
     if (custEdit) {
-      setShops(prev => prev.map(s => s.id === custEdit ? { ...s, shopName: shopName.trim(), ownerName: ownerName.trim(), phone: phone.trim() } : s))
-      showToast('Customer updated!')
-      if (view === 'detail' && selId === custEdit) {
-        // refresh detail
-      }
+      const originalShop = shops.find(s => s.id === custEdit)
+      updateShop({ id: originalShop._id || custEdit, name: shopName.trim(), owner: ownerName.trim(), phone: phone.trim() })
+        .unwrap()
+        .then(() => {
+          showToast('Customer updated!')
+          setCustModal(false)
+        })
+        .catch(err => {
+          setCustErr(err?.data?.message || 'Update failed')
+        })
     } else {
-      const newShop = { id: Date.now(), shopName: shopName.trim(), ownerName: ownerName.trim(), phone: phone.trim() }
-      setShops(prev => [...prev, newShop])
-      showToast('Customer added!')
+      createShop({ name: shopName.trim(), owner: ownerName.trim(), phone: phone.trim() })
+        .unwrap()
+        .then(() => {
+          showToast('Customer added!')
+          setCustModal(false)
+        })
+        .catch(err => {
+          setCustErr(err?.data?.message || 'Creation failed')
+        })
     }
-    setCustModal(false)
   }
   function deleteCustomer(shopId) {
     const sh = shops.find(s => s.id === shopId)
     if (!confirm(`Delete "${sh?.shopName}" and all their ledger data?`)) return
-    setShops(prev => prev.filter(s => s.id !== shopId))
-    setLedger(prev => prev.filter(l => l.shopId !== shopId))
-    showToast('Customer deleted.')
-    setView('list')
+    deleteShop(sh._id || shopId)
+      .unwrap()
+      .then(() => {
+        const entriesToDelete = dbLedger.filter(e => e.customerId === shopId)
+        entriesToDelete.forEach(e => {
+          deleteUdhar(e._id || e.id)
+        })
+        showToast('Customer deleted.')
+        setView('list')
+      })
+      .catch(() => showToast('Failed to delete customer'))
   }
 
   /* ══ UDHAR HANDLERS ══ */
@@ -569,10 +600,10 @@ export default function UdharManagement() {
     setUdharModal(true)
   }
   function openEditEntry(entryId) {
-    const entry = getLedger(ledger, selId).find(e => e.id === entryId)
+    const entry = getLedger(ledger, selId).find(e => e._id === entryId || e.id === entryId)
     if (!entry) return
     setUdharShopId(selId)
-    setEditEntryId(entryId)
+    setEditEntryId(entry._id || entry.id)
     setUdharForm({ date: entry.date, desc: entry.desc || '', advance: String(entry.advance || 0) })
     const prods = entry.products && entry.products.length ? entry.products : [{ name: '', qty: 1, price: entry.total || '' }]
     setProdRows(prods.map(p => ({ name: p.name, qty: p.qty, price: String(p.price) })))
@@ -590,20 +621,41 @@ export default function UdharManagement() {
     const desc = udharForm.desc.trim() || validProds.map(p => p.name).join(', ')
     const products = validProds.map(p => ({ name: p.name, qty: parseFloat(p.qty), price: parseFloat(p.price) || 0 }))
 
-    setLedger(prev => {
-      const base = ensureLedger(sId, prev)
-      return base.map(l => {
-        if (l.shopId !== sId) return l
-        if (editEntryId) {
-          return { ...l, entries: l.entries.map(e => e.id === editEntryId ? { ...e, date: udharForm.date, desc, products, total, advance, udharAmt } : e) }
-        }
-        const newId = nextId + 1
-        setNextId(newId)
-        return { ...l, entries: [...l.entries, { id: newId, date: udharForm.date, type: 'udhar', desc, products, total, advance, udharAmt }] }
+    if (editEntryId) {
+      updateUdhar({
+        id: editEntryId,
+        customerId: sId,
+        date: udharForm.date,
+        desc,
+        products,
+        total,
+        advance,
+        udharAmt,
       })
-    })
-    setUdharModal(false)
-    showToast('Udhar saved!')
+        .unwrap()
+        .then(() => {
+          showToast('Udhar updated!')
+          setUdharModal(false)
+        })
+        .catch(() => showToast('Failed to update Udhar'))
+    } else {
+      createUdhar({
+        customerId: sId,
+        date: udharForm.date,
+        type: 'udhar',
+        desc,
+        products,
+        total,
+        advance,
+        udharAmt,
+      })
+        .unwrap()
+        .then(() => {
+          showToast('Udhar saved!')
+          setUdharModal(false)
+        })
+        .catch(() => showToast('Failed to save Udhar'))
+    }
   }
 
   /* ══ PAYMENT HANDLERS ══ */
@@ -616,24 +668,42 @@ export default function UdharManagement() {
     const amount = parseFloat(payForm.amount) || 0
     if (amount <= 0) { showToast('Amount bharo!'); return }
     const note = payForm.note.trim() || 'Payment received'
-    setLedger(prev => {
-      const base = ensureLedger(payShopId, prev)
-      return base.map(l => {
-        if (l.shopId !== payShopId) return l
-        const newId = nextId + 1
-        setNextId(newId)
-        return { ...l, entries: [...l.entries, { id: newId, date: payForm.date, type: 'payment', desc: note, products: [], total: 0, advance: 0, udharAmt: -amount }] }
-      })
+    
+    createUdhar({
+      customerId: payShopId,
+      date: payForm.date,
+      type: 'payment',
+      desc: note,
+      products: [],
+      total: 0,
+      advance: 0,
+      udharAmt: -amount,
     })
-    setPayModal(false)
-    showToast('Payment recorded!')
+      .unwrap()
+      .then(() => {
+        showToast('Payment recorded!')
+        setPayModal(false)
+      })
+      .catch(() => showToast('Failed to record payment'))
   }
 
   /* ══ DELETE ENTRY ══ */
   function deleteEntry(entryId) {
     if (!confirm('Delete this entry?')) return
-    setLedger(prev => prev.map(l => l.shopId === selId ? { ...l, entries: l.entries.filter(e => e.id !== entryId) } : l))
-    showToast('Entry deleted.')
+    deleteUdhar(entryId)
+      .unwrap()
+      .then(() => showToast('Entry deleted.'))
+      .catch(() => showToast('Failed to delete entry.'))
+  }
+
+  if (isLoadingShops || isLoadingLedger || isLoadingProducts) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: '15px' }}>
+        <div style={{ width: '48px', height: '48px', borderRadius: '50%', border: '4.5px solid #fee2e2', borderTopColor: WARN, animation: 'udharSpin 1s linear infinite' }} />
+        <style>{`@keyframes udharSpin{to{transform:rotate(360deg);}}`}</style>
+        <div style={{ fontFamily: "'Outfit',sans-serif", fontWeight: 700, fontSize: '15px', color: '#64748b' }}>Loading credit registry...</div>
+      </div>
+    )
   }
 
   /* ── Udhar calc ── */
@@ -966,6 +1036,7 @@ export default function UdharManagement() {
           shops={shops} udharShopId={udharShopId} showShopSelect={false}
           form={udharForm} setForm={setUdharForm}
           prodRows={prodRows} setProdRows={setProdRows}
+          productsList={productsList}
           total={udharTotal} advance={udharAdvance} remain={udharRemain}
           onSave={saveUdhar} isEdit={!!editEntryId}
         />
@@ -998,18 +1069,32 @@ export default function UdharManagement() {
           </div>
           <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '3px' }}>Track credit, dues and payment history for all customers</div>
         </div>
-        <button onClick={openAddCustomer} style={{
-          display: 'inline-flex', alignItems: 'center', gap: '7px',
-          background: WARN, color: '#fff', border: 'none',
-          padding: '10px 20px', borderRadius: '10px',
-          fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: '13.5px', fontWeight: 700,
-          cursor: 'pointer', boxShadow: '0 2px 10px rgba(245,158,11,.3)', transition: 'all .2s', whiteSpace: 'nowrap',
-        }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#d97706'; e.currentTarget.style.transform = 'translateY(-1px)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = WARN; e.currentTarget.style.transform = '' }}
-        >
-          <i className="fa-solid fa-user-plus" /> Add Customer
-        </button>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <button onClick={openAddCustomer} style={{
+            display: 'inline-flex', alignItems: 'center', gap: '7px',
+            background: WARN, color: '#fff', border: 'none',
+            padding: '10px 20px', borderRadius: '10px',
+            fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: '13.5px', fontWeight: 700,
+            cursor: 'pointer', boxShadow: '0 2px 10px rgba(245,158,11,.3)', transition: 'all .2s', whiteSpace: 'nowrap',
+          }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#d97706'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = WARN; e.currentTarget.style.transform = '' }}
+          >
+            <i className="fa-solid fa-user-plus" /> Add Customer
+          </button>
+          <button onClick={() => openAddUdhar(null)} style={{
+            display: 'inline-flex', alignItems: 'center', gap: '7px',
+            background: '#8b5cf6', color: '#fff', border: 'none',
+            padding: '10px 20px', borderRadius: '10px',
+            fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: '13.5px', fontWeight: 700,
+            cursor: 'pointer', boxShadow: '0 2px 10px rgba(139,92,246,.3)', transition: 'all .2s', whiteSpace: 'nowrap',
+          }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#7c3aed'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#8b5cf6'; e.currentTarget.style.transform = '' }}
+          >
+            <i className="fa-solid fa-file-invoice-dollar" /> Add Udhar
+          </button>
+        </div>
       </div>
 
       {/* Stat Cards */}
@@ -1035,6 +1120,18 @@ export default function UdharManagement() {
           onMouseLeave={e => e.currentTarget.style.background = WARN}
         >
           <i className="fa-solid fa-user-plus" /> Add Customer
+        </button>
+        <button onClick={() => openAddUdhar(null)} style={{
+          display: 'inline-flex', alignItems: 'center', gap: '7px',
+          background: '#8b5cf6', color: '#fff', border: 'none',
+          padding: '9px 16px', borderRadius: '10px',
+          fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: '13px', fontWeight: 700,
+          cursor: 'pointer', boxShadow: '0 2px 10px rgba(139,92,246,.2)', transition: 'all .2s',
+        }}
+          onMouseEnter={e => { e.currentTarget.style.background = '#7c3aed'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = '#8b5cf6'; e.currentTarget.style.transform = '' }}
+        >
+          <i className="fa-solid fa-file-invoice-dollar" /> Add Udhar
         </button>
         <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap' }}>
           {filterBtns.map(({ key, label, icon, iconColor }) => {
@@ -1100,6 +1197,7 @@ export default function UdharManagement() {
         onShopChange={setUdharShopId}
         form={udharForm} setForm={setUdharForm}
         prodRows={prodRows} setProdRows={setProdRows}
+        productsList={productsList}
         total={udharTotal} advance={udharAdvance} remain={udharRemain}
         onSave={saveUdhar} isEdit={!!editEntryId}
       />
@@ -1160,7 +1258,7 @@ function CustomerModal({ show, onClose, title, form, setForm, onSave, err, isEdi
 /* ══════════════════════════════════════
    UDHAR MODAL
 ══════════════════════════════════════ */
-function UdharModal({ show, onClose, shops, udharShopId, showShopSelect, onShopChange, form, setForm, prodRows, setProdRows, total, advance, remain, onSave, isEdit }) {
+function UdharModal({ show, onClose, shops, udharShopId, showShopSelect, onShopChange, form, setForm, prodRows, setProdRows, productsList = [], total, advance, remain, onSave, isEdit }) {
   const sf = k => e => setForm(p => ({ ...p, [k]: e.target.value }))
 
   return (
@@ -1191,7 +1289,7 @@ function UdharModal({ show, onClose, shops, udharShopId, showShopSelect, onShopC
         <div style={{ gridColumn: '1/-1' }}>
           <MLabel icon="boxes-stacked">Products (Name · Qty · Price)</MLabel>
           {prodRows.map((row, i) => (
-            <ProductRow key={i} row={row}
+            <ProductRow key={i} row={row} productsList={productsList}
               onChange={updated => setProdRows(prev => prev.map((r, ri) => ri === i ? updated : r))}
               onDelete={() => setProdRows(prev => prev.filter((_, ri) => ri !== i))}
             />

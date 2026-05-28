@@ -74,6 +74,13 @@ export class ShopsService {
       throw new NotFoundException(`Customer shop with ID ${id} not found under this tenant`);
     }
 
+    // Cascade delete any Udhar credit ledger entries for this deleted customer
+    try {
+      await this.shopModel.db.collection('udhars').deleteMany({ customerId: id, shopId: sId });
+    } catch (e) {
+      console.error('Failed to cascade delete udhars:', e);
+    }
+
     return { message: 'Customer shop deleted successfully', id };
   }
 }

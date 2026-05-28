@@ -57,6 +57,12 @@ let ShopsService = class ShopsService {
         if (result.deletedCount === 0) {
             throw new common_1.NotFoundException(`Customer shop with ID ${id} not found under this tenant`);
         }
+        try {
+            await this.shopModel.db.collection('udhars').deleteMany({ customerId: id, shopId: sId });
+        }
+        catch (e) {
+            console.error('Failed to cascade delete udhars:', e);
+        }
         return { message: 'Customer shop deleted successfully', id };
     }
 };
