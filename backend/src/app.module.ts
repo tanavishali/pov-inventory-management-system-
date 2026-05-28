@@ -11,6 +11,8 @@ import { ProductsModule } from './products/products.module';
 import { OrdersModule } from './orders/orders.module';
 import { ShopsModule } from './shops/shops.module';
 import { UdharModule } from './udhar/udhar.module';
+import { SalesmanModule } from './salesman/salesman.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
@@ -34,6 +36,8 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     OrdersModule,
     ShopsModule,
     UdharModule,
+    SalesmanModule,
+    DashboardModule,
   ],
   controllers: [AppController, SuperAdminController],
   providers: [

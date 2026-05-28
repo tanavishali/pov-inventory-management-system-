@@ -17,14 +17,8 @@ function Badge({ type, children }) {
   )
 }
 
-function LowStockTable() {
-  const items = [
-    { name: 'Basmati Rice 5kg', cat: 'FMCG',      stock: '8 pcs',  status: 'low', label: 'Critical' },
-    { name: 'Cooking Oil 5L',   cat: 'FMCG',      stock: '15 pcs', status: 'mid', label: 'Low' },
-    { name: 'Sugar 50kg Bag',   cat: 'FMCG',      stock: '5 pcs',  status: 'low', label: 'Critical' },
-    { name: 'Detergent Powder', cat: 'Household', stock: '22 pcs', status: 'mid', label: 'Low' },
-    { name: 'Tea Leaves 1kg',   cat: 'Beverages', stock: '11 pcs', status: 'mid', label: 'Low' },
-  ]
+function LowStockTable({ lowStockAlerts = [] }) {
+  const items = lowStockAlerts
   return (
     <div style={cardStyle}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '18px' }}>
@@ -62,14 +56,8 @@ function LowStockTable() {
   )
 }
 
-function TopProducts() {
-  const products = [
-    { name: 'Basmati Rice 5kg', revenue: '₨1.2L', pct: 85, color: '#0ea5e9' },
-    { name: 'Cooking Oil 5L',   revenue: '₨98K',  pct: 70, color: '#6366f1' },
-    { name: 'Sugar 50kg',       revenue: '₨76K',  pct: 55, color: '#f59e0b' },
-    { name: 'Detergent Powder', revenue: '₨54K',  pct: 40, color: '#10b981' },
-    { name: 'Tea Leaves 1kg',   revenue: '₨42K',  pct: 30, color: '#ec4899' },
-  ]
+function TopProducts({ topSellingProducts = [] }) {
+  const products = topSellingProducts
   return (
     <div style={cardStyle}>
       <div style={{ marginBottom: '18px' }}>
@@ -96,12 +84,12 @@ function TopProducts() {
   )
 }
 
-export default function AnalyticsRow() {
+export default function AnalyticsRow({ lowStockAlerts, topSellingProducts }) {
   return (
     <>
       <div className="analytics-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px', marginBottom: '20px' }}>
-        <LowStockTable />
-        <TopProducts />
+        <LowStockTable lowStockAlerts={lowStockAlerts} />
+        <TopProducts topSellingProducts={topSellingProducts} />
       </div>
       <style>{`
         @media (max-width: 900px) { .analytics-row { grid-template-columns: 1fr !important; } }

@@ -4,15 +4,8 @@ const badgeStyles = {
   low: { background: '#fee2e2', color: '#dc2626' },
 }
 
-const orders = [
-  { id: '#WP-2847', customer: 'Al-Noor Trading', items: '12 items', amount: '₨45,200', status: 'ok',  statusLabel: 'Delivered', date: 'Mar 02' },
-  { id: '#WP-2846', customer: 'Sana Mart',        items: '8 items',  amount: '₨28,600', status: 'mid', statusLabel: 'In Transit', date: 'Mar 02' },
-  { id: '#WP-2845', customer: 'Khan Brothers',    items: '24 items', amount: '₨92,000', status: 'ok',  statusLabel: 'Delivered', date: 'Mar 01' },
-  { id: '#WP-2844', customer: 'City Store',       items: '6 items',  amount: '₨18,400', status: 'low', statusLabel: 'Pending',   date: 'Mar 01' },
-  { id: '#WP-2843', customer: 'Raza Wholesale',   items: '15 items', amount: '₨67,800', status: 'ok',  statusLabel: 'Delivered', date: 'Feb 29' },
-]
-
-export default function RecentOrders() {
+export default function RecentOrders({ recentOrders = [] }) {
+  const orders = recentOrders
   return (
     <div style={{
       background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px',

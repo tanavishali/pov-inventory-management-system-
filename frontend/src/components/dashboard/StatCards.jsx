@@ -1,4 +1,4 @@
-const periodData = {
+const MOCK_PERIOD_DATA = {
   daily:   { sales: '1,20,000', newC: '8',   stock: '23', profit: '31,000',   loss: '5,000',    orders: '44',   delivery: '41' },
   weekly:  { sales: '8,40,000', newC: '47',  stock: '23', profit: '2,10,000', loss: '34,000',   orders: '312',  delivery: '289' },
   monthly: { sales: '36,00,000',newC: '182', stock: '23', profit: '9,20,000', loss: '1,40,000', orders: '1,240',delivery: '1,158' },
@@ -46,8 +46,8 @@ function StatCard({ icon, iconClass, label, valueKey, trend, trendClass, sub, da
   )
 }
 
-export default function StatCards({ period }) {
-  const data = periodData[period] || periodData.weekly
+export default function StatCards({ period, periodData }) {
+  const data = periodData ? (periodData[period] || periodData.weekly) : { sales: '0', newC: '0', stock: '0', profit: '0', loss: '0', orders: '0', delivery: '0' }
 
   const cards = [
     { icon: 'sack-dollar',        iconClass: 'ic-blue',   label: 'Total Sales',       valueKey: 'sales',    trend: '↑ 12.5%',    trendClass: 'trend-up',   sub: '₨ — This Period' },

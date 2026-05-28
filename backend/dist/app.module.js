@@ -20,6 +20,8 @@ const products_module_1 = require("./products/products.module");
 const orders_module_1 = require("./orders/orders.module");
 const shops_module_1 = require("./shops/shops.module");
 const udhar_module_1 = require("./udhar/udhar.module");
+const salesman_module_1 = require("./salesman/salesman.module");
+const dashboard_module_1 = require("./dashboard/dashboard.module");
 const core_1 = require("@nestjs/core");
 const jwt_auth_guard_1 = require("./auth/guards/jwt-auth.guard");
 let AppModule = class AppModule {
@@ -45,6 +47,8 @@ exports.AppModule = AppModule = __decorate([
             orders_module_1.OrdersModule,
             shops_module_1.ShopsModule,
             udhar_module_1.UdharModule,
+            salesman_module_1.SalesmanModule,
+            dashboard_module_1.DashboardModule,
         ],
         controllers: [app_controller_1.AppController, super_admin_controller_1.SuperAdminController],
         providers: [

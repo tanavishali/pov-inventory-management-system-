@@ -1,12 +1,10 @@
-import { useState, useMemo, useEffect } from 'react'
-
-/* ─── Initial Data ─── */
-export const INITIAL_SALESMEN = [
-  { id: 1, name: 'Ahmed Khan',   email: 'ahmed@sales.com',  phone: '+92-300-1234567', cnic: '35202-1234567-1', joined: '2024-01-15', status: 'active',  sales: 125000, orders: 48, password: 'ahmed@123'  },
-  { id: 2, name: 'Sara Malik',   email: 'sara@sales.com',   phone: '+92-321-9876543', cnic: '35202-7654321-2', joined: '2024-02-20', status: 'active',  sales: 98500,  orders: 36, password: 'sara@456'   },
-  { id: 3, name: 'Bilal Ahmed',  email: 'bilal@sales.com',  phone: '+92-333-5556677', cnic: '35202-1122334-3', joined: '2024-03-10', status: 'blocked', sales: 42000,  orders: 17, password: 'bilal@789'  },
-  { id: 4, name: 'Zara Hussain', email: 'zara@sales.com',   phone: '+92-345-1112233', cnic: '35202-9988776-4', joined: '2023-11-05', status: 'active',  sales: 211000, orders: 72, password: 'zara@101'   },
-]
+import { useState, useMemo } from 'react'
+import {
+  useGetSalesmenQuery,
+  useCreateSalesmanMutation,
+  useUpdateSalesmanMutation,
+  useDeleteSalesmanMutation,
+} from '../../store/slices/salesmanApiSlice'
 
 const fmtSales = n => 'Rs ' + Number(n).toLocaleString()
 
@@ -60,7 +58,7 @@ function PwdDisplay({ password }) {
     <div onClick={() => setShow(p => !p)}
       style={{ cursor: 'pointer', userSelect: 'none', fontSize: '12.5px', fontWeight: 600, color: '#1e293b', fontFamily: "'Outfit',sans-serif", letterSpacing: '.3px', wordBreak: 'break-all', display: 'flex', alignItems: 'center', gap: '5px' }}
     >
-      <span>{show ? password : '••••••••'}</span>
+      <span>{show ? (password || '••••••••') : '••••••••'}</span>
       <i className={`fa-solid ${show ? 'fa-eye-slash' : 'fa-eye'}`} style={{ fontSize: '11px', color: '#94a3b8' }} />
     </div>
   )
@@ -68,11 +66,12 @@ function PwdDisplay({ password }) {
 
 /* ─── Salesman Card ─── */
 function SalesmanCard({ sm, onEdit, onToggleBlock, onDelete }) {
-  const isActive = sm.status === 'active'
+  const isActive = sm.status === 'Active' || sm.status === 'active'
   const stripColor = isActive ? '#10b981' : '#ef4444'
   const pillStyle = isActive
     ? { background: '#dcfce7', color: '#16a34a' }
     : { background: '#fee2e2', color: '#dc2626' }
+  const statusLabel = isActive ? 'Active' : (sm.status === 'Locked' || sm.status === 'blocked' ? 'Blocked' : sm.status)
 
   return (
     <div style={{
@@ -101,7 +100,7 @@ function SalesmanCard({ sm, onEdit, onToggleBlock, onDelete }) {
           </div>
           <span style={{ padding: '3px 10px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, flexShrink: 0, ...pillStyle }}>
             <i className={`fa-solid ${isActive ? 'fa-circle-check' : 'fa-ban'}`} style={{ fontSize: '9px', marginRight: '3px' }} />
-            {isActive ? 'Active' : 'Blocked'}
+            {statusLabel}
           </span>
         </div>
 
@@ -126,10 +125,10 @@ function SalesmanCard({ sm, onEdit, onToggleBlock, onDelete }) {
         {/* Stats Badges */}
         <div style={{ display: 'flex', gap: '7px', flexWrap: 'wrap', marginBottom: '12px' }}>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 11px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, background: '#ede9fe', color: '#6d28d9' }}>
-            <i className="fa-solid fa-chart-line" /> Sales: {fmtSales(sm.sales)}
+            <i className="fa-solid fa-chart-line" /> Sales: {fmtSales(sm.sales || 0)}
           </span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '5px 11px', borderRadius: '8px', fontSize: '12px', fontWeight: 700, background: '#e0f2fe', color: '#0369a1' }}>
-            <i className="fa-solid fa-bag-shopping" /> Orders: {sm.orders}
+            <i className="fa-solid fa-bag-shopping" /> Orders: {sm.orders || 0}
           </span>
         </div>
 
@@ -218,23 +217,18 @@ const focusOut = e => { e.target.style.borderColor = '#e2e8f0'; e.target.style.b
 
 /* ─── Main Component ─── */
 export default function SalesmanManagement() {
-  const [salesmen, setSalesmen] = useState(() => {
-    try {
-      const saved = localStorage.getItem('wholesale_salesmen')
-      return saved ? JSON.parse(saved) : INITIAL_SALESMEN
-    } catch { return INITIAL_SALESMEN }
-  })
+  const { data: salesmen = [], isLoading, error: fetchErr, refetch } = useGetSalesmenQuery()
+  const [createSalesman] = useCreateSalesmanMutation()
+  const [updateSalesman] = useUpdateSalesmanMutation()
+  const [deleteSalesman] = useDeleteSalesmanMutation()
 
-  useEffect(() => {
-    localStorage.setItem('wholesale_salesmen', JSON.stringify(salesmen))
-  }, [salesmen])
   const [search,   setSearch]   = useState('')
   const [filter,   setFilter]   = useState('all')
 
   /* Modal state */
   const [modal,   setModal]   = useState(false)
   const [editSm,  setEditSm]  = useState(null)
-  const [form,    setForm]    = useState({ name: '', email: '', phone: '', cnic: '', joined: '', status: 'active',  password: '' })
+  const [form,    setForm]    = useState({ name: '', email: '', phone: '', cnic: '', joined: '', status: 'Active',  password: '' })
   const [formErr, setFormErr] = useState('')
   const [showPwd, setShowPwd] = useState(false)
 
@@ -242,19 +236,27 @@ export default function SalesmanManagement() {
   const filtered = useMemo(() => {
     const q = search.toLowerCase()
     return salesmen.filter(s => {
-      const mf = filter === 'all' || s.status === filter
-      const mq = !q || s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q) || s.phone.includes(q) 
-      return mf && mq
+      let matchesFilter = true
+      if (filter === 'active') {
+        matchesFilter = s.status === 'Active' || s.status === 'active'
+      } else if (filter === 'blocked') {
+        matchesFilter = s.status === 'Locked' || s.status === 'blocked'
+      }
+      const matchesSearch = !q || 
+        s.name?.toLowerCase().includes(q) || 
+        s.email?.toLowerCase().includes(q) || 
+        s.phone?.includes(q) 
+      return matchesFilter && matchesSearch
     })
   }, [salesmen, search, filter])
 
-  const activeCnt  = salesmen.filter(s => s.status === 'active').length
-  const totalSales = salesmen.reduce((a, s) => a + Number(s.sales), 0)
+  const activeCnt  = salesmen.filter(s => s.status === 'Active' || s.status === 'active').length
+  const totalSales = salesmen.reduce((a, s) => a + Number(s.sales || 0), 0)
 
   /* ── Handlers ── */
   function openAdd() {
     setEditSm(null)
-    setForm({ name: '', email: '', phone: '', cnic: '', joined: new Date().toISOString().split('T')[0], status: 'active',  password: '' })
+    setForm({ name: '', email: '', phone: '', cnic: '', joined: new Date().toISOString().split('T')[0], status: 'Active',  password: '' })
     setFormErr('')
     setShowPwd(false)
     setModal(true)
@@ -262,34 +264,65 @@ export default function SalesmanManagement() {
 
   function openEdit(sm) {
     setEditSm(sm)
-    setForm({ name: sm.name, email: sm.email, phone: sm.phone, cnic: sm.cnic || '', joined: sm.joined, status: sm.status, password: sm.password })
+    setForm({ name: sm.name, email: sm.email, phone: sm.phone, cnic: sm.cnic || '', joined: sm.joined || '', status: sm.status || 'Active', password: '' })
     setFormErr('')
     setShowPwd(false)
     setModal(true)
   }
 
-  function confirmSalesman() {
+  async function confirmSalesman() {
     if (!form.name.trim() || !form.phone.trim()) { setFormErr('Name and phone are required.'); return }
-    if (!form.email.trim() || !form.password) { setFormErr('Email and password are required.'); return }
+    if (!form.email.trim() || (!editSm && !form.password)) { setFormErr('Email and password are required.'); return }
     setFormErr('')
-    if (editSm) {
-      setSalesmen(prev => prev.map(s => s.id === editSm.id ? { ...s, ...form } : s))
-    } else {
-      const newId = salesmen.length ? Math.max(...salesmen.map(s => s.id)) + 1 : 1
-      setSalesmen(prev => [...prev, { id: newId, ...form, sales: 0, orders: 0 }])
+    try {
+      if (editSm) {
+        const updatePayload = {
+          id: editSm._id || editSm.id,
+          name: form.name,
+          email: form.email,
+          phone: form.phone,
+          cnic: form.cnic,
+          joined: form.joined,
+          status: form.status,
+        }
+        if (form.password && form.password.trim() !== '') {
+          updatePayload.password = form.password
+        }
+        await updateSalesman(updatePayload).unwrap()
+      } else {
+        await createSalesman(form).unwrap()
+      }
+      setModal(false)
+    } catch (err) {
+      console.error('Failed to save salesman:', err)
+      setFormErr(err?.data?.message || 'Email already exists or invalid form details.')
     }
-    setModal(false)
   }
 
-  function toggleBlock(sm) {
-    const action = sm.status === 'active' ? 'block' : 'unblock'
+  async function toggleBlock(sm) {
+    const isActive = sm.status === 'Active' || sm.status === 'active'
+    const targetStatus = isActive ? 'Locked' : 'Active'
+    const action = isActive ? 'block' : 'unblock'
     if (!confirm(`Are you sure you want to ${action} "${sm.name}"?`)) return
-    setSalesmen(prev => prev.map(s => s.id === sm.id ? { ...s, status: s.status === 'active' ? 'blocked' : 'active' } : s))
+    try {
+      await updateSalesman({
+        id: sm._id || sm.id,
+        status: targetStatus
+      }).unwrap()
+    } catch (err) {
+      console.error('Failed to toggle status:', err)
+      alert('Failed to update status.')
+    }
   }
 
-  function deleteSalesman(sm) {
+  async function handleDeleteSalesman(sm) {
     if (!confirm(`Delete "${sm.name}"? This cannot be undone.`)) return
-    setSalesmen(prev => prev.filter(s => s.id !== sm.id))
+    try {
+      await deleteSalesman(sm._id || sm.id).unwrap()
+    } catch (err) {
+      console.error('Failed to delete salesman:', err)
+      alert('Failed to delete salesman account.')
+    }
   }
 
   const setField = key => e => setForm(p => ({ ...p, [key]: e.target.value }))
@@ -302,6 +335,31 @@ export default function SalesmanManagement() {
 
   /* ── accent color for this page ── */
   const ACCENT = '#6366f1'
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '400px', color: '#64748b' }}>
+        <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '40px', color: '#6366f1', marginBottom: '16px' }} />
+        <div style={{ fontFamily: "'Outfit',sans-serif", fontWeight: 800, fontSize: '17px', color: '#1e293b' }}>Loading Salesmen...</div>
+        <div style={{ fontSize: '12.5px', color: '#94a3b8', marginTop: '4px' }}>Connecting to database, please wait</div>
+      </div>
+    )
+  }
+
+  if (fetchErr) {
+    return (
+      <div style={{ textAlign: 'center', padding: '60px 20px', color: '#dc2626', background: '#fff', borderRadius: '14px', border: '1px solid #fee2e2', maxWidth: '500px', margin: '40px auto' }}>
+        <i className="fa-solid fa-triangle-exclamation" style={{ fontSize: '44px', marginBottom: '16px', color: '#ef4444' }} />
+        <div style={{ fontWeight: 800, fontSize: '18px', color: '#1e293b', marginBottom: '8px' }}>Failed to Load Salesmen</div>
+        <div style={{ fontSize: '13.5px', color: '#64748b', marginBottom: '20px' }}>
+          An error occurred while establishing a secure link with the salesman management service.
+        </div>
+        <button onClick={() => refetch()} style={{ padding: '9px 24px', borderRadius: '8px', background: '#6366f1', color: '#fff', border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '13px', boxShadow: '0 2px 8px rgba(99,102,241,.2)' }}>
+          Retry Connection
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -421,10 +479,10 @@ export default function SalesmanManagement() {
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(300px,1fr))', gap: '16px' }}>
           {filtered.map(sm => (
             <SalesmanCard
-              key={sm.id} sm={sm}
+              key={sm._id || sm.id} sm={sm}
               onEdit={openEdit}
               onToggleBlock={toggleBlock}
-              onDelete={deleteSalesman}
+              onDelete={handleDeleteSalesman}
             />
           ))}
         </div>
@@ -488,8 +546,8 @@ export default function SalesmanManagement() {
           {/* Status */}
           <MField label="Status" icon="circle-info">
             <select style={inputStyle} value={form.status} onChange={setField('status')} onFocus={focusIn} onBlur={focusOut}>
-              <option value="active">Active</option>
-              <option value="blocked">Blocked</option>
+              <option value="Active">Active</option>
+              <option value="Locked">Blocked</option>
             </select>
           </MField>
 
@@ -509,7 +567,7 @@ export default function SalesmanManagement() {
               <input
                 style={{ ...inputStyle, paddingRight: '38px' }}
                 type={showPwd ? 'text' : 'password'}
-                placeholder="••••••••"
+                placeholder={editSm ? "Leave blank to keep current" : "••••••••"}
                 value={form.password} onChange={setField('password')}
                 onFocus={focusIn} onBlur={focusOut}
               />

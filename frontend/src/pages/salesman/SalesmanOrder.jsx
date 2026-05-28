@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useOutletContext, useNavigate } from 'react-router-dom'
 import { useGetShopsQuery } from '../../store/slices/shopsApiSlice'
 import { useGetProductsQuery } from '../../store/slices/productsApiSlice'
+import { useCreateOrderMutation } from '../../store/slices/ordersApiSlice'
 
 const fmt = n => 'Rs ' + Number(n).toLocaleString('en-PK')
 
@@ -102,6 +103,7 @@ export default function SalesmanOrder() {
 
   const { data: dbShops = [], isLoading: isLoadingShops } = useGetShopsQuery()
   const { data: dbProducts = [], isLoading: isLoadingProds } = useGetProductsQuery()
+  const [createOrder, { isLoading: isSending }] = useCreateOrderMutation()
 
   const [step, setStep] = useState(0)
   const [selectedShop, setSelectedShop] = useState(null)
@@ -158,34 +160,61 @@ export default function SalesmanOrder() {
     setShowNewCustomer(false)
   }
 
-  function handleSubmit() {
-    // Generate sequential SO number
-    const existing = (() => { try { return JSON.parse(localStorage.getItem('salesman_orders') || '[]') } catch { return [] } })()
-    const soNumbers = existing
-      .map(o => { const m = o.id.match(/^SO-(\d+)$/); return m ? parseInt(m[1]) : 0 })
-    const nextNum = soNumbers.length ? Math.max(...soNumbers) + 1 : 1
-    const soId = 'SO-' + String(nextNum).padStart(3, '0')
-    const order = {
-      id: soId,
-      salesmanEmail: user?.email,
-      salesmanName: user?.name,
-      shopId: selectedShop.id,
-      shopName: selectedShop.name,
-      shopOwner: selectedShop.owner,
-      products: products.filter(p => cart[p.id]).map(p => ({
-        id: p.id, name: p.name, qty: cart[p.id], price: p.selling, ctn: p.ctn || 0
-      })),
-      total,
-      payment,
-      advance: advAmt,
-      baki,
-      date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
-      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-      createdAt: Date.now(),
-      status: 'pending',
+  async function handleSubmit() {
+    try {
+      // Build API payload matching CreateOrderDto
+      const backendOrderPayload = {
+        customer: selectedShop.owner || 'N/A',
+        shop: selectedShop.name,
+        phone: selectedShop.phone || '',
+        salesman: user?.name || user?.email || 'Salesman',
+        payment: payment,
+        advance: advAmt,
+        products: products.filter(p => cart[p.id]).map(p => ({
+          name: p.name,
+          qty: cart[p.id],
+          price: p.selling,
+          ctn: p.ctn || 0
+        }))
+      }
+
+      // 1. Submit order to the secure backend REST API
+      const response = await createOrder(backendOrderPayload).unwrap()
+
+      // 2. Keep local storage backup for offline salesman reference with generated ID
+      const existing = (() => { try { return JSON.parse(localStorage.getItem('salesman_orders') || '[]') } catch { return [] } })()
+      const soNumbers = existing
+        .map(o => { const m = o.id.match(/^SO-(\d+)$/); return m ? parseInt(m[1]) : 0 })
+      const nextNum = soNumbers.length ? Math.max(...soNumbers) + 1 : 1
+      const soId = 'SO-' + String(nextNum).padStart(3, '0')
+      
+      const order = {
+        id: soId,
+        backendId: response.id || response._id,
+        salesmanEmail: user?.email,
+        salesmanName: user?.name,
+        shopId: selectedShop.id,
+        shopName: selectedShop.name,
+        shopOwner: selectedShop.owner,
+        products: products.filter(p => cart[p.id]).map(p => ({
+          id: p.id, name: p.name, qty: cart[p.id], price: p.selling, ctn: p.ctn || 0
+        })),
+        total,
+        payment,
+        advance: advAmt,
+        baki,
+        date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
+        time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        createdAt: Date.now(),
+        status: 'pending',
+      }
+      
+      localStorage.setItem('salesman_orders', JSON.stringify([...existing, order]))
+      setSubmitted(true)
+    } catch (err) {
+      console.error('Failed to submit order to database:', err)
+      alert(err?.data?.message || 'Failed to submit order. Please check product stock or connection.')
     }
-    localStorage.setItem('salesman_orders', JSON.stringify([...existing, order]))
-    setSubmitted(true)
   }
 
   if (isLoadingShops || isLoadingProds) {
@@ -489,11 +518,21 @@ export default function SalesmanOrder() {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' }}>
-            <button onClick={() => setStep(1)} style={{ padding: '11px 22px', borderRadius: '10px', background: '#f1f5f9', color: '#1e293b', border: 'none', fontWeight: 600, fontSize: '14px', cursor: 'pointer' }}>
+            <button onClick={() => setStep(1)} disabled={isSending} style={{ padding: '11px 22px', borderRadius: '10px', background: '#f1f5f9', color: '#1e293b', border: 'none', fontWeight: 600, fontSize: '14px', cursor: isSending ? 'not-allowed' : 'pointer' }}>
               <i className="fa-solid fa-arrow-left" style={{ marginRight: '7px' }} /> Back
             </button>
-            <button onClick={handleSubmit} style={{ padding: '11px 28px', borderRadius: '10px', background: 'linear-gradient(135deg,#0ea5e9,#6366f1)', color: '#fff', border: 'none', fontWeight: 700, fontSize: '14px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(14,165,233,.35)' }}>
-              <i className="fa-solid fa-paper-plane" style={{ marginRight: '8px' }} /> Send Order
+            <button onClick={handleSubmit} disabled={isSending} style={{ padding: '11px 28px', borderRadius: '10px', background: 'linear-gradient(135deg,#0ea5e9,#6366f1)', color: '#fff', border: 'none', fontWeight: 700, fontSize: '14px', cursor: isSending ? 'not-allowed' : 'pointer', opacity: isSending ? 0.7 : 1, boxShadow: '0 4px 12px rgba(14,165,233,.35)' }}>
+              {isSending ? (
+                <>
+                  <i className="fa-solid fa-circle-notch fa-spin" style={{ marginRight: '8px' }} />
+                  Sending Order...
+                </>
+              ) : (
+                <>
+                  <i className="fa-solid fa-paper-plane" style={{ marginRight: '8px' }} />
+                  Send Order
+                </>
+              )}
             </button>
           </div>
         </div>
