@@ -4,6 +4,7 @@ import { ProductsService } from './products.service';
 import { ProductsController } from './products.controller';
 import { Product, ProductSchema } from './schemas/product.schema';
 import { UsersModule } from '../users/users.module';
+import { StockGateway } from './stock.gateway';
 
 @Module({
   imports: [
@@ -11,7 +12,7 @@ import { UsersModule } from '../users/users.module';
     UsersModule,
   ],
   controllers: [ProductsController],
-  providers: [ProductsService],
-  exports: [ProductsService],
+  providers: [ProductsService, StockGateway],
+  exports: [ProductsService, StockGateway],
 })
 export class ProductsModule {}

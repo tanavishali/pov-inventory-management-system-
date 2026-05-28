@@ -29,6 +29,13 @@ export class ProductsController {
     return this.productsService.findAll(shopId);
   }
 
+  @Get('low-stock')
+  @ApiOperation({ summary: 'Get all low stock products for the current tenant shop' })
+  async findLowStock(@Req() req: any) {
+    const shopId = await this.getShopId(req);
+    return this.productsService.findLowStock(shopId);
+  }
+
   @Post()
   @ApiOperation({ summary: 'Create a new product in the current tenant shop' })
   async create(@Req() req: any, @Body() createProductDto: CreateProductDto) {

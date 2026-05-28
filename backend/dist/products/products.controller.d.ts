@@ -8,6 +8,7 @@ export declare class ProductsController {
     constructor(productsService: ProductsService, usersService: UsersService);
     private getShopId;
     findAll(req: any): Promise<import("./schemas/product.schema").ProductDocument[]>;
+    findLowStock(req: any): Promise<import("./schemas/product.schema").ProductDocument[]>;
     create(req: any, createProductDto: CreateProductDto): Promise<import("./schemas/product.schema").ProductDocument>;
     update(req: any, id: string, updateProductDto: UpdateProductDto): Promise<import("./schemas/product.schema").ProductDocument>;
     remove(req: any, id: string): Promise<any>;

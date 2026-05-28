@@ -17,10 +17,13 @@ const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const product_schema_1 = require("./schemas/product.schema");
+const stock_gateway_1 = require("./stock.gateway");
 let ProductsService = class ProductsService {
     productModel;
-    constructor(productModel) {
+    stockGateway;
+    constructor(productModel, stockGateway) {
         this.productModel = productModel;
+        this.stockGateway = stockGateway;
     }
     async findAll(shopId) {
         const sId = typeof shopId === 'string' ? new mongoose_2.Types.ObjectId(shopId) : shopId;
@@ -41,7 +44,17 @@ let ProductsService = class ProductsService {
             id: nextId,
             shopId: sId,
         });
-        return newProduct.save();
+        const saved = await newProduct.save();
+        try {
+            this.stockGateway.sendCurrentStockStatus(sId.toString());
+            if (saved.stock <= (saved.threshold ?? 10)) {
+                this.stockGateway.emitLowStockAlert(sId.toString(), saved);
+            }
+        }
+        catch (e) {
+            console.error('Socket notification error on create:', e);
+        }
+        return saved;
     }
     async update(shopId, id, updateProductDto) {
         const sId = typeof shopId === 'string' ? new mongoose_2.Types.ObjectId(shopId) : shopId;
@@ -49,6 +62,15 @@ let ProductsService = class ProductsService {
         const product = await this.productModel.findOneAndUpdate({ id, shopId: sId }, safeUpdateData, { new: true }).exec();
         if (!product) {
             throw new common_1.NotFoundException(`Product with ID ${id} not found in this shop`);
+        }
+        try {
+            this.stockGateway.sendCurrentStockStatus(sId.toString());
+            if (product.stock <= (product.threshold ?? 10)) {
+                this.stockGateway.emitLowStockAlert(sId.toString(), product);
+            }
+        }
+        catch (e) {
+            console.error('Socket notification error on update:', e);
         }
         return product;
     }
@@ -58,13 +80,70 @@ let ProductsService = class ProductsService {
         if (result.deletedCount === 0) {
             throw new common_1.NotFoundException(`Product with ID ${id} not found in this shop`);
         }
+        try {
+            this.stockGateway.sendCurrentStockStatus(sId.toString());
+        }
+        catch (e) {
+            console.error('Socket notification error on delete:', e);
+        }
         return { message: 'Product deleted successfully', id };
+    }
+    async findLowStock(shopId) {
+        const sId = typeof shopId === 'string' ? new mongoose_2.Types.ObjectId(shopId) : shopId;
+        const products = await this.productModel.find({ shopId: sId }).exec();
+        return products.filter(p => p.stock <= (p.threshold ?? 10));
+    }
+    async decrementStock(shopId, name, qty) {
+        const sId = typeof shopId === 'string' ? new mongoose_2.Types.ObjectId(shopId) : shopId;
+        const product = await this.productModel.findOne({
+            shopId: sId,
+            name: { $regex: new RegExp(`^${name}$`, 'i') }
+        }).exec();
+        if (product) {
+            product.stock = Math.max(0, product.stock - qty);
+            const saved = await product.save();
+            try {
+                this.stockGateway.sendCurrentStockStatus(sId.toString());
+                if (saved.stock <= (saved.threshold ?? 10)) {
+                    this.stockGateway.emitLowStockAlert(sId.toString(), saved);
+                }
+            }
+            catch (e) {
+                console.error('Socket notification error on stock decrement:', e);
+            }
+            return saved;
+        }
+        return null;
+    }
+    async incrementStock(shopId, name, qty) {
+        const sId = typeof shopId === 'string' ? new mongoose_2.Types.ObjectId(shopId) : shopId;
+        const product = await this.productModel.findOne({
+            shopId: sId,
+            name: { $regex: new RegExp(`^${name}$`, 'i') }
+        }).exec();
+        if (product) {
+            product.stock = product.stock + qty;
+            const saved = await product.save();
+            try {
+                this.stockGateway.sendCurrentStockStatus(sId.toString());
+                if (saved.stock <= (saved.threshold ?? 10)) {
+                    this.stockGateway.emitLowStockAlert(sId.toString(), saved);
+                }
+            }
+            catch (e) {
+                console.error('Socket notification error on stock increment:', e);
+            }
+            return saved;
+        }
+        return null;
     }
 };
 exports.ProductsService = ProductsService;
 exports.ProductsService = ProductsService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(product_schema_1.Product.name)),
-    __metadata("design:paramtypes", [mongoose_2.Model])
+    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => stock_gateway_1.StockGateway))),
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        stock_gateway_1.StockGateway])
 ], ProductsService);
 //# sourceMappingURL=products.service.js.map

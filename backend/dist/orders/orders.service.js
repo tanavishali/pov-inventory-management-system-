@@ -17,10 +17,13 @@ const common_1 = require("@nestjs/common");
 const mongoose_1 = require("@nestjs/mongoose");
 const mongoose_2 = require("mongoose");
 const order_schema_1 = require("./schemas/order.schema");
+const products_service_1 = require("../products/products.service");
 let OrdersService = class OrdersService {
     orderModel;
-    constructor(orderModel) {
+    productsService;
+    constructor(orderModel, productsService) {
         this.orderModel = orderModel;
+        this.productsService = productsService;
     }
     async findAll(shopId) {
         const sId = typeof shopId === 'string' ? new mongoose_2.Types.ObjectId(shopId) : shopId;
@@ -54,7 +57,18 @@ let OrdersService = class OrdersService {
             time: timeStr,
             shopId: sId,
         });
-        return newOrder.save();
+        const savedOrder = await newOrder.save();
+        if (savedOrder.products && savedOrder.products.length > 0) {
+            for (const p of savedOrder.products) {
+                try {
+                    await this.productsService.decrementStock(sId.toString(), p.name, p.qty);
+                }
+                catch (e) {
+                    console.error(`Failed to decrement stock for product "${p.name}":`, e);
+                }
+            }
+        }
+        return savedOrder;
     }
     async update(shopId, id, updateOrderDto) {
         const sId = typeof shopId === 'string' ? new mongoose_2.Types.ObjectId(shopId) : shopId;
@@ -67,10 +81,21 @@ let OrdersService = class OrdersService {
     }
     async delete(shopId, id) {
         const sId = typeof shopId === 'string' ? new mongoose_2.Types.ObjectId(shopId) : shopId;
-        const result = await this.orderModel.deleteOne({ id, shopId: sId }).exec();
-        if (result.deletedCount === 0) {
+        const order = await this.orderModel.findOne({ id, shopId: sId }).exec();
+        if (!order) {
             throw new common_1.NotFoundException(`Order with ID ${id} not found in this shop`);
         }
+        if (order.products && order.products.length > 0) {
+            for (const p of order.products) {
+                try {
+                    await this.productsService.incrementStock(sId.toString(), p.name, p.qty);
+                }
+                catch (e) {
+                    console.error(`Failed to restore stock for product "${p.name}":`, e);
+                }
+            }
+        }
+        await this.orderModel.deleteOne({ id, shopId: sId }).exec();
         return { message: 'Order deleted successfully', id };
     }
 };
@@ -78,6 +103,8 @@ exports.OrdersService = OrdersService;
 exports.OrdersService = OrdersService = __decorate([
     (0, common_1.Injectable)(),
     __param(0, (0, mongoose_1.InjectModel)(order_schema_1.Order.name)),
-    __metadata("design:paramtypes", [mongoose_2.Model])
+    __param(1, (0, common_1.Inject)((0, common_1.forwardRef)(() => products_service_1.ProductsService))),
+    __metadata("design:paramtypes", [mongoose_2.Model,
+        products_service_1.ProductsService])
 ], OrdersService);
 //# sourceMappingURL=orders.service.js.map

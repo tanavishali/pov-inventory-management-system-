@@ -13,6 +13,7 @@ const orders_service_1 = require("./orders.service");
 const orders_controller_1 = require("./orders.controller");
 const order_schema_1 = require("./schemas/order.schema");
 const users_module_1 = require("../users/users.module");
+const products_module_1 = require("../products/products.module");
 let OrdersModule = class OrdersModule {
 };
 exports.OrdersModule = OrdersModule;
@@ -21,6 +22,7 @@ exports.OrdersModule = OrdersModule = __decorate([
         imports: [
             mongoose_1.MongooseModule.forFeature([{ name: order_schema_1.Order.name, schema: order_schema_1.OrderSchema }]),
             users_module_1.UsersModule,
+            (0, common_1.forwardRef)(() => products_module_1.ProductsModule),
         ],
         controllers: [orders_controller_1.OrdersController],
         providers: [orders_service_1.OrdersService],

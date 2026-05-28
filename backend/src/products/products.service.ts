@@ -1,14 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Product, ProductDocument } from './schemas/product.schema';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { StockGateway } from './stock.gateway';
 
 @Injectable()
 export class ProductsService {
   constructor(
     @InjectModel(Product.name) private productModel: Model<ProductDocument>,
+    @Inject(forwardRef(() => StockGateway))
+    private readonly stockGateway: StockGateway,
   ) {}
 
   async findAll(shopId: Types.ObjectId | string): Promise<ProductDocument[]> {
@@ -36,7 +39,19 @@ export class ProductsService {
       shopId: sId,
     });
     
-    return newProduct.save();
+    const saved = await newProduct.save();
+    
+    // Notify via sockets
+    try {
+      this.stockGateway.sendCurrentStockStatus(sId.toString());
+      if (saved.stock <= (saved.threshold ?? 10)) {
+        this.stockGateway.emitLowStockAlert(sId.toString(), saved);
+      }
+    } catch (e) {
+      console.error('Socket notification error on create:', e);
+    }
+    
+    return saved;
   }
 
   async update(shopId: Types.ObjectId | string, id: number, updateProductDto: UpdateProductDto): Promise<ProductDocument> {
@@ -55,6 +70,16 @@ export class ProductsService {
       throw new NotFoundException(`Product with ID ${id} not found in this shop`);
     }
     
+    // Notify via sockets
+    try {
+      this.stockGateway.sendCurrentStockStatus(sId.toString());
+      if (product.stock <= (product.threshold ?? 10)) {
+        this.stockGateway.emitLowStockAlert(sId.toString(), product);
+      }
+    } catch (e) {
+      console.error('Socket notification error on update:', e);
+    }
+    
     return product;
   }
 
@@ -66,6 +91,74 @@ export class ProductsService {
       throw new NotFoundException(`Product with ID ${id} not found in this shop`);
     }
     
+    // Notify via sockets
+    try {
+      this.stockGateway.sendCurrentStockStatus(sId.toString());
+    } catch (e) {
+      console.error('Socket notification error on delete:', e);
+    }
+    
     return { message: 'Product deleted successfully', id };
+  }
+
+  async findLowStock(shopId: Types.ObjectId | string): Promise<ProductDocument[]> {
+    const sId = typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
+    const products = await this.productModel.find({ shopId: sId }).exec();
+    return products.filter(p => p.stock <= (p.threshold ?? 10));
+  }
+
+  async decrementStock(shopId: Types.ObjectId | string, name: string, qty: number): Promise<ProductDocument | null> {
+    const sId = typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
+    
+    // Case-insensitive name match to prevent sync mismatch
+    const product = await this.productModel.findOne({
+      shopId: sId,
+      name: { $regex: new RegExp(`^${name}$`, 'i') }
+    }).exec();
+    
+    if (product) {
+      product.stock = Math.max(0, product.stock - qty);
+      const saved = await product.save();
+      
+      try {
+        this.stockGateway.sendCurrentStockStatus(sId.toString());
+        if (saved.stock <= (saved.threshold ?? 10)) {
+          this.stockGateway.emitLowStockAlert(sId.toString(), saved);
+        }
+      } catch (e) {
+        console.error('Socket notification error on stock decrement:', e);
+      }
+      
+      return saved;
+    }
+    
+    return null;
+  }
+
+  async incrementStock(shopId: Types.ObjectId | string, name: string, qty: number): Promise<ProductDocument | null> {
+    const sId = typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
+    
+    const product = await this.productModel.findOne({
+      shopId: sId,
+      name: { $regex: new RegExp(`^${name}$`, 'i') }
+    }).exec();
+    
+    if (product) {
+      product.stock = product.stock + qty;
+      const saved = await product.save();
+      
+      try {
+        this.stockGateway.sendCurrentStockStatus(sId.toString());
+        if (saved.stock <= (saved.threshold ?? 10)) {
+          this.stockGateway.emitLowStockAlert(sId.toString(), saved);
+        }
+      } catch (e) {
+        console.error('Socket notification error on stock increment:', e);
+      }
+      
+      return saved;
+    }
+    
+    return null;
   }
 }

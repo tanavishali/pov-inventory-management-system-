@@ -17,7 +17,8 @@ const fmt = n => '₨' + Number(n).toLocaleString('en-PK')
 
 function getStatus(p) {
   if (p.stock === 0) return 'out'
-  if (p.stock <= p.threshold) return 'low'
+  const thresh = p.threshold !== undefined && p.threshold !== null ? Number(p.threshold) : 10
+  if (p.stock <= thresh) return 'low'
   return 'in-stock'
 }
 

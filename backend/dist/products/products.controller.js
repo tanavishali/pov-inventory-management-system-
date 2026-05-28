@@ -37,6 +37,10 @@ let ProductsController = class ProductsController {
         const shopId = await this.getShopId(req);
         return this.productsService.findAll(shopId);
     }
+    async findLowStock(req) {
+        const shopId = await this.getShopId(req);
+        return this.productsService.findLowStock(shopId);
+    }
     async create(req, createProductDto) {
         const shopId = await this.getShopId(req);
         return this.productsService.create(shopId, createProductDto);
@@ -59,6 +63,14 @@ __decorate([
     __metadata("design:paramtypes", [Object]),
     __metadata("design:returntype", Promise)
 ], ProductsController.prototype, "findAll", null);
+__decorate([
+    (0, common_1.Get)('low-stock'),
+    (0, swagger_1.ApiOperation)({ summary: 'Get all low stock products for the current tenant shop' }),
+    __param(0, (0, common_1.Req)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", Promise)
+], ProductsController.prototype, "findLowStock", null);
 __decorate([
     (0, common_1.Post)(),
     (0, swagger_1.ApiOperation)({ summary: 'Create a new product in the current tenant shop' }),

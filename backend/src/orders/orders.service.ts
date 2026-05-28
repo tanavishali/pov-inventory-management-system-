@@ -1,14 +1,17 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Inject, forwardRef } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { Order, OrderDocument } from './schemas/order.schema';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateOrderDto } from './dto/update-order.dto';
+import { ProductsService } from '../products/products.service';
 
 @Injectable()
 export class OrdersService {
   constructor(
     @InjectModel(Order.name) private orderModel: Model<OrderDocument>,
+    @Inject(forwardRef(() => ProductsService))
+    private readonly productsService: ProductsService,
   ) {}
 
   async findAll(shopId: Types.ObjectId | string): Promise<OrderDocument[]> {
@@ -50,7 +53,20 @@ export class OrdersService {
       shopId: sId,
     });
     
-    return newOrder.save();
+    const savedOrder = await newOrder.save();
+
+    // Decrement product stock in database for each product in the order
+    if (savedOrder.products && savedOrder.products.length > 0) {
+      for (const p of savedOrder.products) {
+        try {
+          await this.productsService.decrementStock(sId.toString(), p.name, p.qty);
+        } catch (e) {
+          console.error(`Failed to decrement stock for product "${p.name}":`, e);
+        }
+      }
+    }
+    
+    return savedOrder;
   }
 
   async update(shopId: Types.ObjectId | string, id: string, updateOrderDto: UpdateOrderDto): Promise<OrderDocument> {
@@ -75,10 +91,24 @@ export class OrdersService {
   async delete(shopId: Types.ObjectId | string, id: string): Promise<any> {
     const sId = typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
     
-    const result = await this.orderModel.deleteOne({ id, shopId: sId }).exec();
-    if (result.deletedCount === 0) {
+    // Find the order first to get its products so we can restore the stock
+    const order = await this.orderModel.findOne({ id, shopId: sId }).exec();
+    if (!order) {
       throw new NotFoundException(`Order with ID ${id} not found in this shop`);
     }
+    
+    // Restore product stock
+    if (order.products && order.products.length > 0) {
+      for (const p of order.products) {
+        try {
+          await this.productsService.incrementStock(sId.toString(), p.name, p.qty);
+        } catch (e) {
+          console.error(`Failed to restore stock for product "${p.name}":`, e);
+        }
+      }
+    }
+    
+    await this.orderModel.deleteOne({ id, shopId: sId }).exec();
     
     return { message: 'Order deleted successfully', id };
   }

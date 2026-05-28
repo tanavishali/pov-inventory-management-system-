@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Outlet, useNavigate, useLocation } from 'react-router-dom'
+import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import Sidebar from '../components/dashboard/Sidebar'
 import Topbar from '../components/dashboard/Topbar'
 import { INITIAL_PRODUCTS } from './dashboard/ProductManagement'
 import { INITIAL_ORDERS } from './dashboard/OrderManagement'
 import { useGetOrdersQuery } from '../store/slices/ordersApiSlice'
+import { io } from 'socket.io-client'
+import { useGetProductsQuery } from '../store/slices/productsApiSlice'
 
 const routeToNav = {
   '/dashboard': 'Dashboard',
@@ -51,6 +53,7 @@ export default function DashboardLayout({ user, onLogout }) {
   }
 
   const { data: dbOrders = [] } = useGetOrdersQuery()
+  const { data: dbProducts = [] } = useGetProductsQuery()
   const [sharedOrders, setSharedOrders] = useState([])
 
   useEffect(() => {
@@ -84,8 +87,65 @@ export default function DashboardLayout({ user, onLogout }) {
     }
   }, [])
 
-  // Low stock items for notification bell
-  const lowStockItems = INITIAL_PRODUCTS.filter(p => p.stock === 0 || p.stock <= p.threshold)
+  const [lowStockItems, setLowStockItems] = useState([])
+
+  useEffect(() => {
+    if (!user) return
+    const shopId = user.role === 'admin' ? user._id || user.id : user.shopId
+    if (!shopId) return
+
+    // Connect to backend Socket.io server
+    const socket = io('http://localhost:3000')
+
+    socket.on('connect', () => {
+      console.log('Connected to WebSocket server')
+      // Join the shop's tenant room
+      socket.emit('join-shop', { shopId })
+    });
+
+    // Listen for low stock status
+    socket.on('stock-status', (data) => {
+      if (data && data.lowStockItems) {
+        setLowStockItems(data.lowStockItems)
+      }
+    });
+
+    // Listen for real-time stock alert push notifications
+    socket.on('low-stock-alert', (data) => {
+      console.log('Low stock alert received:', data)
+      if (data && data.product) {
+        setLowStockItems(prev => {
+          const exists = prev.some(p => p.id === data.product.id)
+          if (exists) {
+            return prev.map(p => p.id === data.product.id ? data.product : p)
+          } else {
+            return [...prev, data.product]
+          }
+        })
+      }
+    });
+
+    return () => {
+      socket.disconnect()
+    }
+  }, [user])
+
+  // Sync lowStockItems dynamically with the live database products list
+  useEffect(() => {
+    if (dbProducts.length > 0) {
+      const items = dbProducts
+        .filter(p => p.stock === 0 || p.stock <= (p.threshold !== undefined && p.threshold !== null ? Number(p.threshold) : 10))
+        .map(p => ({
+          id: p.id,
+          name: p.name,
+          stock: p.stock,
+          threshold: p.threshold !== undefined && p.threshold !== null ? Number(p.threshold) : 10,
+        }))
+      setLowStockItems(items)
+    } else {
+      setLowStockItems([])
+    }
+  }, [dbProducts])
 
   if (!user) return <Navigate to="/auth" replace />
 
