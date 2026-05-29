@@ -63,6 +63,9 @@ export class User {
   // Linkage
   @Prop({ type: Types.ObjectId, ref: 'User' })
   shopId?: Types.ObjectId; // For admins (self) and salesmen (linked to admin)
+
+  @Prop({ type: [String], default: [] })
+  whatsappAdminNumbers?: string[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);

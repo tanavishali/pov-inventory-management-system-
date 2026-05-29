@@ -1,4 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import { useGetProfileQuery } from '../../store/slices/authApiSlice'
+import { io } from 'socket.io-client'
 
 /* ══════════════════════════════════════
    CONSTANTS
@@ -487,8 +489,372 @@ function BrandingTab({ showToast }) {
 }
 
 /* ══════════════════════════════════════
+   TAB: WHATSAPP BOT INTEGRATION
+   ══════════════════════════════════════ */
+function WhatsAppTab({ showToast }) {
+  const { data: user } = useGetProfileQuery()
+  const token = localStorage.getItem('wholesale_token')
+
+  const [allowedNumbers, setAllowedNumbers] = useState('')
+  const [status, setStatus] = useState('disconnected') // 'disconnected', 'connecting', 'connected'
+  const [qrCode, setQrCode] = useState(null)
+  const [phone, setPhone] = useState(null)
+  const [socket, setSocket] = useState(null)
+  const [loadingSettings, setLoadingSettings] = useState(false)
+  const [savingSettings, setSavingSettings] = useState(false)
+
+  // Fetch allowed numbers on mount
+  useEffect(() => {
+    if (!user) return
+    
+    const fetchSettings = async () => {
+      setLoadingSettings(true)
+      try {
+        const res = await fetch('http://localhost:3000/whatsapp/settings', {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        })
+        const data = await res.json()
+        if (data.allowedNumbers) {
+          setAllowedNumbers(data.allowedNumbers.join(', '))
+        }
+      } catch (err) {
+        console.error('Failed to fetch WhatsApp settings:', err)
+      } finally {
+        setLoadingSettings(false)
+      }
+    }
+
+    fetchSettings()
+  }, [user, token])
+
+  // Manage Socket.IO status and QR pairing streams
+  useEffect(() => {
+    if (!user) return
+
+    const shopId = user.id || user._id
+    const newSocket = io('http://localhost:3000')
+    setSocket(newSocket)
+
+    newSocket.on('connect', () => {
+      console.log('Connected to WhatsApp WS Gateway')
+      newSocket.emit('join-whatsapp', { shopId })
+    })
+
+    newSocket.on('whatsapp-status', (data) => {
+      console.log('WS Status Update:', data)
+      setStatus(data.status)
+      if (data.phone) {
+        setPhone(data.phone)
+      } else if (data.status === 'disconnected') {
+        setPhone(null)
+      }
+      if (data.status === 'connected') {
+        setQrCode(null)
+      }
+    })
+
+    newSocket.on('whatsapp-qr', (data) => {
+      console.log('WS QR Update received')
+      setQrCode(data.qr)
+      setStatus('connecting')
+    })
+
+    return () => {
+      newSocket.disconnect()
+    }
+  }, [user])
+
+  const handleConnect = () => {
+    if (!socket || !user) return
+    const shopId = user.id || user._id
+    setStatus('connecting')
+    socket.emit('whatsapp-connect', { shopId })
+  }
+
+  const handleDisconnect = () => {
+    if (!socket || !user) return
+    const shopId = user.id || user._id
+    socket.emit('whatsapp-disconnect', { shopId })
+  }
+
+  const handleSaveSettings = async () => {
+    if (!user) return
+    setSavingSettings(true)
+    try {
+      const numbersArray = allowedNumbers
+        .split(',')
+        .map(n => n.trim().replace(/\s+/g, ''))
+        .filter(n => n.length > 0)
+
+      const res = await fetch('http://localhost:3000/whatsapp/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ allowedNumbers: numbersArray })
+      })
+      const data = await res.json()
+      if (data.success) {
+        setAllowedNumbers(data.allowedNumbers.join(', '))
+        showToast('WhatsApp admin numbers updated!')
+      }
+    } catch (err) {
+      console.error('Failed to save settings:', err)
+      showToast('Error saving numbers!')
+    } finally {
+      setSavingSettings(false)
+    }
+  }
+
+  const handleResetSettings = () => {
+    setAllowedNumbers('')
+  }
+
+  const commands = [
+    { cmd: '/today', desc: "Today's sales performance audit", icon: 'chart-line', color: '#0ea5e9', preview: "📊 Orders: 7 | Sales: Rs.124,500" },
+    { cmd: '/stock', desc: 'Get critical low-stock alert reports', icon: 'triangle-exclamation', color: '#f59e0b', preview: "⚠️ Chana Dal: 0 pcs | Sufi Oil: 3 pcs" },
+    { cmd: '/bills', desc: 'List active remaining unpaid bills', icon: 'file-invoice-dollar', color: '#10b981', preview: "🧾 Sana Store: Rs.10,000 pending" },
+    { cmd: '/udar', desc: 'Outstanding udhar credit ledgers', icon: 'sack-dollar', color: '#8b5cf6', preview: "💰 Credit Outstanding: Rs.41,500 total" },
+    { cmd: '/shops', desc: 'List customer retail shops profiles', icon: 'store', color: '#ec4899', preview: "🏪 Hassan Electronics [Active]" },
+    { cmd: '/orders', desc: 'Retrieve 10 most recent orders log', icon: 'box', color: '#6366f1', preview: "📦 #INV-102 | Completed | Rs.24,000" },
+    { cmd: '/help', desc: 'Show chatbot help manual', icon: 'circle-question', color: '#64748b', preview: "🤖 Show commands guide" },
+    { cmd: '/users', desc: 'List all salesmen & team members', icon: 'users', color: '#0891b2', preview: "👥 Ali Khan [Active] | Sales: 42" },
+    { cmd: '/info', desc: 'Admin account & system summary', icon: 'circle-info', color: '#7c3aed', preview: "ℹ️ Plan: Premium | Shops: 12" },
+  ]
+
+  if (!user) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '50px' }}>
+        <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '28px', color: ACCENT2 }} />
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      
+      {/* ── Two Column Dashboard Layout ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', alignItems: 'start' }} className="whatsapp-tab-grid">
+        
+        {/* Left Column: Connection Center */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
+          <SCard iconBg="#e6fffa" iconColor="#0f766e" icon="comments" title="WhatsApp Connection Center" sub="Link your mobile device to enable instant automated reports">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', alignItems: 'center', textAlign: 'center', padding: '10px 0' }}>
+              
+              {/* Pulsing Status indicator */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 14px', borderRadius: '20px', background: status === 'connected' ? '#dcfce7' : status === 'connecting' ? '#fef3c7' : '#f1f5f9', color: status === 'connected' ? '#16a34a' : status === 'connecting' ? '#d97706' : '#64748b', fontSize: '12px', fontWeight: 700 }}>
+                <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'currentColor', display: 'inline-block', animation: status === 'connected' || status === 'connecting' ? 'pulse 1.5s infinite' : 'none' }} />
+                {status === 'connected' ? 'ACTIVE & ONLINE' : status === 'connecting' ? 'PAIRING / INITIALIZING' : 'DISCONNECTED'}
+              </div>
+
+              {/* Status View: DISCONNECTED */}
+              {status === 'disconnected' && (
+                <div style={{ width: '100%' }}>
+                  <div style={{ width: '70px', height: '70px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '15px auto', fontSize: '32px', color: '#94a3b8' }}>
+                    <i className="fa-solid fa-qrcode" />
+                  </div>
+                  <p style={{ fontSize: '13px', color: '#64748b', lineHeight: '1.6', maxWidth: '300px', margin: '0 auto 20px auto' }}>
+                    Scan a dynamically generated secure QR code from your phone's WhatsApp client to link this POS bot.
+                  </p>
+                  <button onClick={handleConnect} style={{
+                    width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                    background: '#10b981', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: '12px',
+                    fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: '13.5px', fontWeight: 700, cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(16,185,129,.3)', transition: 'all .2s'
+                  }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#059669'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#10b981'; e.currentTarget.style.transform = '' }}
+                  >
+                    <i className="fa-brands fa-whatsapp" style={{ fontSize: '18px' }} /> Pair WhatsApp Account
+                  </button>
+                </div>
+              )}
+
+              {/* Status View: CONNECTING / QR GENERATION */}
+              {status === 'connecting' && (
+                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  {qrCode ? (
+                    <div style={{ marginTop: '10px' }}>
+                      <div style={{ background: '#fff', padding: '14px', borderRadius: '16px', border: '1.5px solid #e2e8f0', boxShadow: '0 4px 20px rgba(0,0,0,.04)', display: 'inline-block', position: 'relative' }}>
+                        <img src={qrCode} alt="WhatsApp Pairing QR" style={{ width: '200px', height: '200px', display: 'block' }} />
+                      </div>
+                      <div style={{ marginTop: '16px', fontSize: '12.5px', color: '#475569', textAlign: 'left', background: '#f8fafc', padding: '14px 16px', borderRadius: '12px', border: '1px solid #e2e8f0', maxWidth: '320px', margin: '16px auto 0 auto' }}>
+                        <div style={{ fontWeight: 700, color: '#1e293b', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}><i className="fa-solid fa-circle-info" style={{ color: '#0ea5e9' }} /> Pairing Instructions:</div>
+                        <ol style={{ paddingLeft: '20px', margin: 0, display: 'flex', flexDirection: 'column', gap: '4px', lineHeight: '1.5' }}>
+                          <li>Open <strong>WhatsApp</strong> on your phone</li>
+                          <li>Tap <strong>Menu</strong> (⋮) or <strong>Settings</strong> (⚙️)</li>
+                          <li>Select <strong>Linked Devices</strong> &rarr; <strong>Link a Device</strong></li>
+                          <li>Point your camera at this QR code</li>
+                        </ol>
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ padding: '40px 0' }}>
+                      <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '36px', color: '#10b981', marginBottom: '14px' }} />
+                      <p style={{ fontSize: '13.5px', fontWeight: 600, color: '#475569' }}>Spawning secure WhatsApp Client...</p>
+                      <p style={{ fontSize: '12px', color: '#94a3b8', marginTop: '4px' }}>This may take up to 10 seconds. Please wait.</p>
+                    </div>
+                  )}
+                  
+                  <button onClick={handleDisconnect} style={{
+                    marginTop: '20px', width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                    background: '#f1f5f9', color: '#64748b', border: '1.5px solid #e2e8f0', padding: '10px 20px', borderRadius: '10px',
+                    fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: '12.5px', fontWeight: 600, cursor: 'pointer', transition: 'all .18s'
+                  }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.color = '#334155' }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = '#e2e8f0'; e.currentTarget.style.color = '#64748b' }}
+                  >
+                    Cancel Pairing Session
+                  </button>
+                </div>
+              )}
+
+              {/* Status View: CONNECTED */}
+              {status === 'connected' && (
+                <div style={{ width: '100%' }}>
+                  <div style={{ position: 'relative', width: '76px', height: '76px', background: '#dcfce7', color: '#16a34a', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '15px auto', fontSize: '36px' }}>
+                    <i className="fa-solid fa-circle-check" />
+                    <span style={{ position: 'absolute', right: '0', bottom: '0', width: '16px', height: '16px', border: '2.5px solid #fff', borderRadius: '50%', background: '#16a34a' }} />
+                  </div>
+                  
+                  <div style={{ marginBottom: '22px' }}>
+                    <div style={{ fontFamily: "'Outfit',sans-serif", fontWeight: 800, fontSize: '17px', color: '#1e293b' }}>Connected Successfully!</div>
+                    {phone && <div style={{ fontSize: '13px', color: '#64748b', marginTop: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                      <i className="fa-brands fa-whatsapp" style={{ color: '#16a34a' }} /> Linked Account: <strong style={{ color: '#334155' }}>+{phone}</strong>
+                    </div>}
+                  </div>
+
+                  <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px', textAlign: 'left', marginBottom: '22px', fontSize: '12.5px', color: '#475569', lineHeight: '1.6' }}>
+                    <div style={{ fontWeight: 700, color: '#1e293b', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '6px' }}><i className="fa-solid fa-shield-halved" style={{ color: '#16a34a' }} /> Protected Live Guard:</div>
+                    Your WhatsApp bot is responsive. To query stats securely, send commands in your <strong>direct message (DM) chat</strong>.
+                  </div>
+
+                  <button onClick={handleDisconnect} style={{
+                    width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                    background: '#ef4444', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: '12px',
+                    fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: '13.5px', fontWeight: 700, cursor: 'pointer',
+                    boxShadow: '0 4px 14px rgba(239,68,68,.3)', transition: 'all .2s'
+                  }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#dc2626'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#ef4444'; e.currentTarget.style.transform = '' }}
+                  >
+                    <i className="fa-solid fa-link-slash" /> Unlink WhatsApp Device
+                  </button>
+                </div>
+              )}
+
+            </div>
+          </SCard>
+
+        </div>
+
+        {/* Right Column: Security Gates & Configs */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          
+          <SCard iconBg="#eef2ff" iconColor="#4338ca" icon="shield-halved" title="Bot Security Guardrails" sub="Configure allowed admin phone numbers permitted to query reports">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <FLabel icon="phone">Allowed WhatsApp Admin Numbers</FLabel>
+                <input
+                  type="text"
+                  value={allowedNumbers}
+                  onChange={e => setAllowedNumbers(e.target.value)}
+                  placeholder="e.g. +923001234567, +923219876543"
+                  disabled={loadingSettings}
+                  style={{
+                    width: '100%', padding: '10px 13px',
+                    border: '1.5px solid #e2e8f0',
+                    borderRadius: '9px',
+                    fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: '13px',
+                    color: '#1e293b', background: '#f5f7fa',
+                    outline: 'none', transition: 'all .2s',
+                  }}
+                />
+                <div style={{ fontSize: '11.5px', color: '#94a3b8', marginTop: '6px', lineHeight: '1.5' }}>
+                  Provide phone numbers with **country codes** (comma separated).
+                  <br />
+                  <span style={{ fontWeight: 600, color: '#64748b' }}>💡 Pro-Tip:</span> If left empty, **only you** chatting with yourself can query stats.
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '8px' }}>
+                <button
+                  onClick={handleResetSettings}
+                  disabled={loadingSettings || savingSettings}
+                  style={{
+                    padding: '8px 14px', borderRadius: '8px', border: '1.5px solid #e2e8f0',
+                    background: '#fff', color: '#64748b', fontSize: '12px', fontWeight: 600, cursor: 'pointer'
+                  }}
+                >
+                  Clear All
+                </button>
+                <button
+                  onClick={handleSaveSettings}
+                  disabled={loadingSettings || savingSettings}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: '6px',
+                    background: ACCENT2, color: '#fff', border: 'none',
+                    padding: '8px 16px', borderRadius: '8px',
+                    fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                    boxShadow: '0 2px 6px rgba(99,102,241,.25)'
+                  }}
+                >
+                  {savingSettings ? <i className="fa-solid fa-circle-notch fa-spin" /> : <i className="fa-solid fa-floppy-disk" />} Save Numbers
+                </button>
+              </div>
+            </div>
+          </SCard>
+
+          {/* Commands Reference Guide */}
+          <SCard iconBg="#fef3c7" iconColor="#d97706" icon="terminal" title="WhatsApp Commands Guide" sub="Send these commands on WhatsApp to trigger automated POS reports">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '280px', overflowY: 'auto', paddingRight: '4px' }}>
+              {commands.map((c, idx) => (
+                <div key={idx} style={{ display: 'flex', alignItems: 'start', gap: '10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '9px', padding: '10px 12px' }}>
+                  <div style={{ width: '28px', height: '28px', borderRadius: '6px', background: `${c.color}15`, color: c.color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', flexShrink: 0, marginTop: '2px' }}>
+                    <i className={`fa-solid fa-${c.icon}`} />
+                  </div>
+                  <div style={{ flexGrow: 1 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 700, color: '#1e293b', fontFamily: 'monospace' }}>{c.cmd}</span>
+                      <span style={{ fontSize: '11px', color: '#94a3b8', background: '#e2e8f0', padding: '1px 6px', borderRadius: '999px', fontFamily: 'monospace' }}>DM/Self</span>
+                    </div>
+                    <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{c.desc}</div>
+                    <div style={{ fontSize: '11px', color: '#94a3b8', fontStyle: 'italic', marginTop: '4px', borderTop: '1px dashed #e2e8f0', paddingTop: '4px' }}>
+                      Output: {c.preview}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </SCard>
+
+        </div>
+
+      </div>
+
+      <style>{`
+        @keyframes pulse {
+          0% { opacity: .4; transform: scale(1); }
+          50% { opacity: 1; transform: scale(1.15); }
+          100% { opacity: .4; transform: scale(1); }
+        }
+        @media (max-width: 900px) {
+          .whatsapp-tab-grid {
+            grid-template-columns: 1fr !important;
+          }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+/* ══════════════════════════════════════
    MAIN SETTINGS COMPONENT
-══════════════════════════════════════ */
+   ══════════════════════════════════════ */
 export default function Settings() {
   const [activeTab, setActiveTab] = useState('profile')
   const [toast,     setToast]     = useState({ show: false, msg: '' })
@@ -502,6 +868,7 @@ export default function Settings() {
     { key: 'profile',  icon: 'user',         label: 'Profile'            },
     { key: 'business', icon: 'file-invoice',  label: 'Invoice & Business' },
     { key: 'branding', icon: 'swatchbook',    label: 'Branding'           },
+    { key: 'whatsapp', icon: 'comments',      label: 'WhatsApp Bot'       },
   ]
 
   return (
@@ -563,6 +930,7 @@ export default function Settings() {
           {activeTab === 'profile'  && <ProfileTab  showToast={showToast} />}
           {activeTab === 'business' && <BusinessTab showToast={showToast} />}
           {activeTab === 'branding' && <BrandingTab showToast={showToast} />}
+          {activeTab === 'whatsapp' && <WhatsAppTab showToast={showToast} />}
         </div>
 
       </div>
