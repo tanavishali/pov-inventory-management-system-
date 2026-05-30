@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { useGetProfileQuery } from '../../store/slices/authApiSlice'
+import { useGetProfileQuery, useUpdateProfileMutation, useGetBusinessSettingsQuery, useUpdateBusinessSettingsMutation } from '../../store/slices/authApiSlice'
 import { io } from 'socket.io-client'
 
 /* ══════════════════════════════════════
@@ -142,13 +142,35 @@ function Toast({ show, msg }) {
    TAB: PROFILE
 ══════════════════════════════════════ */
 function ProfileTab({ showToast }) {
+  const { data: user, isLoading: profileLoading } = useGetProfileQuery()
+  const [updateProfile, { isLoading: saving }] = useUpdateProfileMutation()
+
   const [form, setForm] = useState({
-    fname: 'Admin', lname: 'User',
-    email: 'admin@wholesalepro.pk', phone: '+92-300-0000000',
-    address: '', city: 'Lahore', lang: 'English',
+    fname: '', lname: '',
+    email: '', phone: '',
+    address: '', city: '', lang: 'English',
   })
   const [avatarSrc, setAvatarSrc] = useState(null)
   const avatarInputRef = useRef(null)
+  const [loaded, setLoaded] = useState(false)
+
+  // Populate form from user profile data
+  useEffect(() => {
+    if (user && !loaded) {
+      const nameParts = (user.name || '').split(' ')
+      setForm({
+        fname: nameParts[0] || '',
+        lname: nameParts.slice(1).join(' ') || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        address: user.address || '',
+        city: user.city || '',
+        lang: user.language || 'English',
+      })
+      setAvatarSrc(user.avatar || null)
+      setLoaded(true)
+    }
+  }, [user, loaded])
 
   const sf = key => e => setForm(p => ({ ...p, [key]: e.target.value }))
 
@@ -161,9 +183,54 @@ function ProfileTab({ showToast }) {
   }
 
   function handleReset() {
-    setForm({ fname: 'Admin', lname: 'User', email: 'admin@wholesalepro.pk', phone: '+92-300-0000000', address: '', city: 'Lahore', lang: 'English' })
-    setAvatarSrc(null)
+    if (user) {
+      const nameParts = (user.name || '').split(' ')
+      setForm({
+        fname: nameParts[0] || '',
+        lname: nameParts.slice(1).join(' ') || '',
+        email: user.email || '',
+        phone: user.phone || '',
+        address: user.address || '',
+        city: user.city || '',
+        lang: user.language || 'English',
+      })
+      setAvatarSrc(user.avatar || null)
+    } else {
+      setAvatarSrc(null)
+    }
   }
+
+  async function handleSave() {
+    try {
+      const fullName = `${form.fname} ${form.lname}`.trim()
+      const res = await updateProfile({
+        name: fullName,
+        email: form.email,
+        phone: form.phone,
+        address: form.address,
+        city: form.city,
+        language: form.lang,
+        avatar: avatarSrc,
+      }).unwrap()
+      if (res.success) {
+        showToast('Profile saved successfully!')
+      }
+    } catch (err) {
+      showToast(err?.data?.message || 'Error saving profile!')
+    }
+  }
+
+  if (profileLoading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '50px' }}>
+        <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '28px', color: ACCENT2 }} />
+      </div>
+    )
+  }
+
+  const statusBg = user?.status === 'Active' ? '#dcfce7' : user?.status === 'Locked' ? '#fee2e2' : '#fef3c7'
+  const statusColor = user?.status === 'Active' ? '#16a34a' : user?.status === 'Locked' ? '#dc2626' : '#d97706'
+  const roleLabel = user?.role === 'admin' ? 'System Administrator' : user?.role === 'super-admin' ? 'Super Admin' : 'Salesman'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '18px' }}>
@@ -191,9 +258,9 @@ function ProfileTab({ showToast }) {
           <div>
             <div style={{ fontFamily: "'Outfit',sans-serif", fontWeight: 800, fontSize: '16px' }}>{form.fname} {form.lname}</div>
             <div style={{ fontSize: '12.5px', color: '#94a3b8', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              System Administrator &nbsp;
-              <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 9px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, background: '#dcfce7', color: '#16a34a' }}>
-                <i className="fa-solid fa-circle" style={{ fontSize: '7px', marginRight: '3px' }} />Active
+              {roleLabel} &nbsp;
+              <span style={{ display: 'inline-flex', alignItems: 'center', padding: '2px 9px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, background: statusBg, color: statusColor }}>
+                <i className="fa-solid fa-circle" style={{ fontSize: '7px', marginRight: '3px' }} />{user?.status || 'Active'}
               </span>
             </div>
             <button
@@ -223,6 +290,10 @@ function ProfileTab({ showToast }) {
             <FLabel icon="phone">Phone Number</FLabel>
             <FInput value={form.phone} onChange={sf('phone')} />
           </div>
+          <div>
+            <FLabel icon="envelope">Email Address</FLabel>
+            <FInput value={form.email} onChange={sf('email')} type="email" />
+          </div>
           <div style={{ gridColumn: '1/-1' }}>
             <FLabel icon="location-dot">Address</FLabel>
             <FInput value={form.address} onChange={sf('address')} placeholder="e.g. Main Market, Lahore" />
@@ -243,8 +314,8 @@ function ProfileTab({ showToast }) {
 
       <SaveRow
         onCancel={handleReset}
-        onSave={() => showToast('Profile saved successfully!')}
-        saveLabel="Save Profile"
+        onSave={handleSave}
+        saveLabel={saving ? 'Saving...' : 'Save Profile'}
       />
     </div>
   )
@@ -254,6 +325,9 @@ function ProfileTab({ showToast }) {
    TAB: BUSINESS & INVOICE
 ══════════════════════════════════════ */
 function BusinessTab({ showToast }) {
+  const { data: settings, isLoading } = useGetBusinessSettingsQuery()
+  const [updateSettings, { isLoading: saving }] = useUpdateBusinessSettingsMutation()
+
   const DEFAULT_BIZ = {
     name: 'WholesalePro Distributors',
     ownerName: '',
@@ -269,27 +343,95 @@ function BusinessTab({ showToast }) {
     prefix: 'INV-', tax: '17',
     footer: 'Thank you for your business. Goods once sold will not be returned.',
   }
-  const [biz, setBiz] = useState(() => {
-    try { return { ...DEFAULT_BIZ, ...JSON.parse(localStorage.getItem('wholesale_biz') || '{}') } }
-    catch { return DEFAULT_BIZ }
-  })
-  const [inv, setInv] = useState(() => {
-    try { return { ...DEFAULT_INV, ...JSON.parse(localStorage.getItem('wholesale_inv') || '{}') } }
-    catch { return DEFAULT_INV }
-  })
+  
+  const [biz, setBiz] = useState(DEFAULT_BIZ)
+  const [inv, setInv] = useState(DEFAULT_INV)
+  const [loaded, setLoaded] = useState(false)
+
+  // Populate from database settings
+  useEffect(() => {
+    if (settings && !loaded) {
+      setBiz({
+        name: settings.businessName || '',
+        ownerName: settings.ownerName || '',
+        ownerPhone: settings.ownerPhone || '',
+        phone: settings.businessPhone || '',
+        email: settings.businessEmail || '',
+        address: settings.businessAddress || '',
+        ntn: settings.ntn || '',
+        strn: settings.strn || '',
+        currency: settings.currency || 'PKR — Pakistani Rupee (Rs)',
+        fyear: settings.financialYearStart || 'July',
+      })
+      setInv({
+        prefix: settings.invoicePrefix || 'INV-',
+        tax: String(settings.invoiceTax ?? '17'),
+        footer: settings.invoiceFooter || 'Thank you for your business. Goods once sold will not be returned.',
+      })
+      setLoaded(true)
+    }
+  }, [settings, loaded])
 
   const sb = key => e => setBiz(p => ({ ...p, [key]: e.target.value }))
   const si = key => e => setInv(p => ({ ...p, [key]: e.target.value }))
 
   function handleReset() {
-    setBiz(DEFAULT_BIZ)
-    setInv(DEFAULT_INV)
+    if (settings) {
+      setBiz({
+        name: settings.businessName || '',
+        ownerName: settings.ownerName || '',
+        ownerPhone: settings.ownerPhone || '',
+        phone: settings.businessPhone || '',
+        email: settings.businessEmail || '',
+        address: settings.businessAddress || '',
+        ntn: settings.ntn || '',
+        strn: settings.strn || '',
+        currency: settings.currency || 'PKR — Pakistani Rupee (Rs)',
+        fyear: settings.financialYearStart || 'July',
+      })
+      setInv({
+        prefix: settings.invoicePrefix || 'INV-',
+        tax: String(settings.invoiceTax ?? '17'),
+        footer: settings.invoiceFooter || 'Thank you for your business. Goods once sold will not be returned.',
+      })
+    } else {
+      setBiz(DEFAULT_BIZ)
+      setInv(DEFAULT_INV)
+    }
   }
 
-  function handleSave() {
-    localStorage.setItem('wholesale_biz', JSON.stringify(biz))
-    localStorage.setItem('wholesale_inv', JSON.stringify(inv))
-    showToast('Business info saved successfully!')
+  async function handleSave() {
+    try {
+      const res = await updateSettings({
+        businessName: biz.name,
+        ownerName: biz.ownerName,
+        ownerPhone: biz.ownerPhone,
+        businessPhone: biz.phone,
+        businessEmail: biz.email,
+        businessAddress: biz.address,
+        ntn: biz.ntn,
+        strn: biz.strn,
+        currency: biz.currency,
+        financialYearStart: biz.fyear,
+        invoicePrefix: inv.prefix,
+        invoiceTax: Number(inv.tax || 0),
+        invoiceFooter: inv.footer,
+      }).unwrap()
+      
+      if (res.success) {
+        showToast('Business & Invoice settings saved successfully!')
+      }
+    } catch (err) {
+      showToast(err?.data?.message || 'Error saving settings!')
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '50px' }}>
+        <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '28px', color: ACCENT2 }} />
+      </div>
+    )
   }
 
   return (
@@ -366,7 +508,7 @@ function BusinessTab({ showToast }) {
       <SaveRow
         onCancel={handleReset}
         onSave={handleSave}
-        saveLabel="Save Business Info"
+        saveLabel={saving ? 'Saving...' : 'Save Business Info'}
       />
     </div>
   )
@@ -376,9 +518,22 @@ function BusinessTab({ showToast }) {
    TAB: BRANDING
 ══════════════════════════════════════ */
 function BrandingTab({ showToast }) {
+  const { data: settings, isLoading } = useGetBusinessSettingsQuery()
+  const [updateSettings, { isLoading: saving }] = useUpdateBusinessSettingsMutation()
+
   const [brandName,  setBrandName]  = useState('WholesalePro')
   const [logoSrc,    setLogoSrc]    = useState(null)
   const logoInputRef = useRef(null)
+  const [loaded, setLoaded] = useState(false)
+
+  // Populate from database settings
+  useEffect(() => {
+    if (settings && !loaded) {
+      setBrandName(settings.brandName || 'WholesalePro')
+      setLogoSrc(settings.logoSrc || null)
+      setLoaded(true)
+    }
+  }, [settings, loaded])
 
   function handleLogoUpload(e) {
     const file = e.target.files?.[0]
@@ -396,7 +551,28 @@ function BrandingTab({ showToast }) {
   function resetBranding() {
     setBrandName('WholesalePro')
     removeLogo()
-    showToast('Branding reset to default!')
+  }
+
+  async function handleSave() {
+    try {
+      const res = await updateSettings({
+        brandName,
+        logoSrc: logoSrc || '',
+      }).unwrap()
+      if (res.success) {
+        showToast('Branding saved successfully!')
+      }
+    } catch (err) {
+      showToast(err?.data?.message || 'Error saving branding!')
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', padding: '50px' }}>
+        <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '28px', color: ACCENT2 }} />
+      </div>
+    )
   }
 
   return (
@@ -480,9 +656,9 @@ function BrandingTab({ showToast }) {
 
       <SaveRow
         onCancel={resetBranding}
-        onSave={() => showToast('Branding saved successfully!')}
+        onSave={handleSave}
         cancelLabel="Reset to Default"
-        saveLabel="Save Branding"
+        saveLabel={saving ? 'Saving...' : 'Save Branding'}
       />
     </div>
   )

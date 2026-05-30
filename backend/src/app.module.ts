@@ -14,6 +14,7 @@ import { UdharModule } from './udhar/udhar.module';
 import { SalesmanModule } from './salesman/salesman.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { WhatsappModule } from './whatsapp/whatsapp.module';
+import { BusinessSettingsModule } from './business-settings/business-settings.module';
 
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
@@ -40,6 +41,7 @@ import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
     SalesmanModule,
     DashboardModule,
     WhatsappModule,
+    BusinessSettingsModule,
   ],
   controllers: [AppController, SuperAdminController],
   providers: [

@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 
-export default function Sidebar({ isOpen, activeNav, onNavClick, onLogout, user }) {
+export default function Sidebar({ isOpen, activeNav, onNavClick, onLogout, user, settings }) {
   const navigate = useNavigate()
 
   // Get plan/fee info from user object
@@ -61,14 +61,22 @@ export default function Sidebar({ isOpen, activeNav, onNavClick, onLogout, user 
         onClick={() => onNavClick('Dashboard', '/dashboard')}>
         <div style={{
           width: '38px', height: '38px',
-          background: 'linear-gradient(135deg, #0ea5e9, #6366f1)',
+          background: settings?.logoSrc ? 'transparent' : 'linear-gradient(135deg, #0ea5e9, #6366f1)',
           borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: '17px', color: '#fff', fontWeight: 800,
           fontFamily: "'Outfit', sans-serif", flexShrink: 0,
-          boxShadow: '0 4px 10px rgba(14,165,233,0.35)',
-        }}>W</div>
+          boxShadow: settings?.logoSrc ? 'none' : '0 4px 10px rgba(14,165,233,0.35)',
+          overflow: 'hidden',
+          border: settings?.logoSrc ? '1px solid #e2e8f0' : 'none',
+        }}>
+          {settings?.logoSrc ? (
+            <img src={settings.logoSrc} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          ) : (
+            (settings?.brandName || 'WholesalePro').charAt(0).toUpperCase()
+          )}
+        </div>
         <div style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 800, fontSize: '15px', color: '#1e293b', lineHeight: 1.1 }}>
-          WholesalePro
+          {settings?.brandName || 'WholesalePro'}
           <span style={{ display: 'block', color: '#0ea5e9', fontSize: '10px', fontWeight: 600, letterSpacing: '2px', marginTop: '1px' }}>MANAGEMENT</span>
         </div>
       </div>

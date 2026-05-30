@@ -60,6 +60,19 @@ export class User {
   @Prop({ default: 0 })
   orders?: number;
 
+  // Profile Fields
+  @Prop()
+  address?: string;
+
+  @Prop()
+  city?: string;
+
+  @Prop({ default: 'English' })
+  language?: string;
+
+  @Prop()
+  avatar?: string;
+
   // Linkage
   @Prop({ type: Types.ObjectId, ref: 'User' })
   shopId?: Types.ObjectId; // For admins (self) and salesmen (linked to admin)

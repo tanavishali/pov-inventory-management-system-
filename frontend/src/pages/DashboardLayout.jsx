@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import Sidebar from '../components/dashboard/Sidebar'
 import Topbar from '../components/dashboard/Topbar'
+import { useGetBusinessSettingsQuery } from '../store/slices/authApiSlice'
 import { INITIAL_PRODUCTS } from './dashboard/ProductManagement'
 import { INITIAL_ORDERS } from './dashboard/OrderManagement'
 import { useGetOrdersQuery } from '../store/slices/ordersApiSlice'
@@ -29,6 +30,8 @@ export default function DashboardLayout({ user, onLogout }) {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768)
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768)
   const [period, setPeriod] = useState('weekly')
+  
+  const { data: settings } = useGetBusinessSettingsQuery()
   // Helper: normalize salesman orders and assign proper prefixed IDs
   function normalizeSalesmanOrders(salesmanOrders, existingOrders = []) {
     const invSettings = (() => { try { return JSON.parse(localStorage.getItem('wholesale_inv') || '{}') } catch { return {} } })()
@@ -183,6 +186,7 @@ export default function DashboardLayout({ user, onLogout }) {
         onLogout={onLogout}
         isMobile={isMobile}
         user={user}
+        settings={settings}
       />
 
       <Topbar

@@ -11,6 +11,15 @@ export const authApiSlice = apiSlice.injectEndpoints({
     }),
     getProfile: builder.query({
       query: () => '/auth/profile',
+      providesTags: ['User'],
+    }),
+    updateProfile: builder.mutation({
+      query: (profileData) => ({
+        url: '/auth/profile',
+        method: 'PATCH',
+        body: profileData,
+      }),
+      invalidatesTags: ['User'],
     }),
     logout: builder.mutation({
       query: () => ({
@@ -18,7 +27,26 @@ export const authApiSlice = apiSlice.injectEndpoints({
         method: 'POST',
       }),
     }),
+    getBusinessSettings: builder.query({
+      query: () => '/business-settings',
+      providesTags: ['BusinessSettings'],
+    }),
+    updateBusinessSettings: builder.mutation({
+      query: (settingsData) => ({
+        url: '/business-settings',
+        method: 'POST',
+        body: settingsData,
+      }),
+      invalidatesTags: ['BusinessSettings'],
+    }),
   }),
 });
 
-export const { useLoginMutation, useGetProfileQuery, useLogoutMutation } = authApiSlice;
+export const {
+  useLoginMutation,
+  useGetProfileQuery,
+  useUpdateProfileMutation,
+  useLogoutMutation,
+  useGetBusinessSettingsQuery,
+  useUpdateBusinessSettingsMutation,
+} = authApiSlice;
