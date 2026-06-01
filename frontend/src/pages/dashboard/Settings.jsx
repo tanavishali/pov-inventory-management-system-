@@ -686,7 +686,7 @@ function WhatsAppTab({ showToast }) {
     const fetchSettings = async () => {
       setLoadingSettings(true)
       try {
-        const res = await fetch('http://localhost:3000/whatsapp/settings', {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/whatsapp/settings`, {
           headers: {
             'Authorization': `Bearer ${token}`
           }
@@ -710,7 +710,7 @@ function WhatsAppTab({ showToast }) {
     if (!user) return
 
     const shopId = user.id || user._id
-    const newSocket = io('http://localhost:3000')
+    const newSocket = io(import.meta.env.VITE_API_URL)
     setSocket(newSocket)
 
     newSocket.on('connect', () => {
@@ -764,7 +764,7 @@ function WhatsAppTab({ showToast }) {
         .map(n => n.trim().replace(/\s+/g, ''))
         .filter(n => n.length > 0)
 
-      const res = await fetch('http://localhost:3000/whatsapp/settings', {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/whatsapp/settings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

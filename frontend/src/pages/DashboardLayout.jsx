@@ -98,7 +98,7 @@ export default function DashboardLayout({ user, onLogout }) {
     if (!shopId) return
 
     // Connect to backend Socket.io server
-    const socket = io('http://localhost:3000')
+    const socket = io(import.meta.env.VITE_API_URL)
 
     socket.on('connect', () => {
       console.log('Connected to WebSocket server')
