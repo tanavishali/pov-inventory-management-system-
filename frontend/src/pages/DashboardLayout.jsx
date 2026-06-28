@@ -98,9 +98,9 @@ export default function DashboardLayout({ user, onLogout }) {
 
   const [lowStockItems, setLowStockItems] = useState([])
 
+  const shopId = user ? (user.role === 'admin' ? user._id || user.id : user.shopId) : null
+
   useEffect(() => {
-    if (!user) return
-    const shopId = user.role === 'admin' ? user._id || user.id : user.shopId
     if (!shopId) return
 
     // Connect to backend Socket.io server
@@ -137,7 +137,7 @@ export default function DashboardLayout({ user, onLogout }) {
     return () => {
       socket.disconnect()
     }
-  }, [user])
+  }, [shopId])
 
   // Sync lowStockItems dynamically with the live database products list
   useEffect(() => {

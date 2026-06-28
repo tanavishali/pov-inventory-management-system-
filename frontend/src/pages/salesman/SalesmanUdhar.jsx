@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
+import { toast } from 'react-toastify'
+import { useUpdateOrderMutation } from '../../store/slices/ordersApiSlice'
 
 const fmt = n => 'Rs ' + Number(n).toLocaleString('en-PK')
 
@@ -303,6 +305,8 @@ export default function SalesmanUdhar() {
   const [search, setSearch]             = useState('')
   const [selectedShop, setSelectedShop] = useState(null)
 
+  const [updateOrder] = useUpdateOrderMutation()
+
   const myOrders = orders.filter(o => o.salesmanEmail === user?.email && o.payment === 'Udaar')
 
   const totalBaki    = myOrders.reduce((s, o) => s + (o.baki || 0), 0)
@@ -323,11 +327,28 @@ export default function SalesmanUdhar() {
     return true
   })
 
-  function handleWasuliSave(updated) {
+  async function handleWasuliSave(updated) {
+    // Update the local (offline) mirror first
     const newOrders = orders.map(o => o.id === updated.id ? updated : o)
     setOrders(newOrders)
     localStorage.setItem('salesman_orders', JSON.stringify(newOrders))
     setWasuliOrder(null)
+
+    // Keep the canonical backend order's payment/advance in sync (best-effort)
+    if (updated.backendId) {
+      try {
+        await updateOrder({
+          id: updated.backendId,
+          payment: updated.payment,
+          advance: updated.advance || 0,
+        }).unwrap()
+        toast.success('Payment recorded.')
+      } catch (err) {
+        toast.warn('Saved on this device, but server sync failed — please retry when online.')
+      }
+    } else {
+      toast.success('Payment recorded.')
+    }
   }
 
   /* ── Detail Page ── */

@@ -6,9 +6,10 @@ export class CreatePaymentDto {
   @IsNotEmpty()
   shop: string;
 
-  @ApiProperty({ example: 'admin@pos.com' })
+  @ApiProperty({ example: 'admin@pos.com', required: false })
+  @IsOptional()
   @IsEmail()
-  email: string;
+  email?: string;
 
   @ApiProperty({ example: 2500 })
   @IsNumber()

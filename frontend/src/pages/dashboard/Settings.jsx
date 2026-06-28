@@ -1072,18 +1072,8 @@ export default function Settings() {
           </div>
           <div style={{ fontSize: '13px', color: '#94a3b8', marginTop: '3px' }}>Manage your account, preferences and system configuration</div>
         </div>
-        <button onClick={() => showToast('Settings saved successfully!')} style={{
-          display: 'inline-flex', alignItems: 'center', gap: '7px',
-          background: ACCENT2, color: '#fff', border: 'none',
-          padding: '10px 22px', borderRadius: '10px',
-          fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: '13px', fontWeight: 700,
-          cursor: 'pointer', boxShadow: '0 2px 10px rgba(99,102,241,.3)', transition: 'all .2s',
-        }}
-          onMouseEnter={e => { e.currentTarget.style.background = '#4f46e5'; e.currentTarget.style.transform = 'translateY(-1px)' }}
-          onMouseLeave={e => { e.currentTarget.style.background = ACCENT2; e.currentTarget.style.transform = '' }}
-        >
-          <i className="fa-solid fa-floppy-disk" /> Save Changes
-        </button>
+        {/* Each settings tab has its own Save button; a global header save was removed
+            because it only showed a success toast without persisting any data. */}
       </div>
 
       {/* ── Layout: Sidebar + Panel ── */}

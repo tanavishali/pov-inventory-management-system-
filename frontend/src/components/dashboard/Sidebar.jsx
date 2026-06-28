@@ -4,9 +4,15 @@ export default function Sidebar({ isOpen, activeNav, onNavClick, onLogout, user,
   const navigate = useNavigate()
 
   // Get plan/fee info from user object
-  const feeStatus = user?.feeStatus || 'Unknown'
+  const plan = user?.plan || 'Basic'              // subscription tier (Basic/Premium/Enterprise)
+  const feeStatus = user?.feeStatus || ''         // payment state (Paid/Unpaid/Overdue)
   const expiryDate = user?.expiryDate || ''
-  const planBadgeColor = feeStatus === 'Paid' ? { bg: '#dcfce7', color: '#16a34a', icon: 'circle-check' } : { bg: '#fee2e2', color: '#dc2626', icon: 'triangle-exclamation' }
+  const planLabel = feeStatus ? `${plan} · ${feeStatus}` : plan
+  const planBadgeColor = feeStatus === 'Paid'
+    ? { bg: '#dcfce7', color: '#16a34a', icon: 'circle-check' }
+    : (feeStatus === 'Unpaid' || feeStatus === 'Overdue')
+      ? { bg: '#fee2e2', color: '#dc2626', icon: 'triangle-exclamation' }
+      : { bg: '#e0f2fe', color: '#0369a1', icon: 'circle-info' }
 
   const daysLeft = (() => {
     if (!expiryDate) return null
@@ -133,7 +139,7 @@ export default function Sidebar({ isOpen, activeNav, onNavClick, onLogout, user,
           <div style={{ display: 'flex', alignItems: 'center', gap: '7px', marginBottom: '4px' }}>
             <i className={`fa-solid fa-${planBadgeColor.icon}`} style={{ color: planBadgeColor.color, fontSize: '13px' }} />
             <span style={{ fontSize: '12px', fontWeight: 700, color: planBadgeColor.color }}>
-              Plan: {feeStatus}
+              Plan: {planLabel}
             </span>
           </div>
           {expiryDate && (

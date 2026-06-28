@@ -174,9 +174,19 @@ export class SuperAdminController {
   @Post('admins')
   @ApiOperation({ summary: 'Create a new Shop Admin (Shop Owner)' })
   createAdmin(@Body() createAdminDto: CreateAdminDto) {
+    // Safety net: always populate subscription fields so a new account never
+    // has a blank/expired subscription, even if the client omits them.
+    const isDemo = createAdminDto.status === 'Demo';
+    const today = new Date();
+    const defaultExpiry = new Date();
+    defaultExpiry.setDate(defaultExpiry.getDate() + (isDemo ? 14 : 30));
+
     return this.usersService.create({
       ...createAdminDto,
       role: 'admin',
+      purchasedOn: createAdminDto.purchasedOn || today.toISOString().split('T')[0],
+      expiryDate: createAdminDto.expiryDate || defaultExpiry.toISOString().split('T')[0],
+      feeStatus: createAdminDto.feeStatus || (createAdminDto.status === 'Active' ? 'Paid' : 'Unpaid'),
     });
   }
 
@@ -209,11 +219,15 @@ export class SuperAdminController {
     if (!user) return { message: 'User not found' };
 
     const safeDays = (body?.days && body.days > 0) ? body.days : 30;
-    const currentExpiry = user.expiryDate ? new Date(user.expiryDate) : new Date();
-    currentExpiry.setDate(currentExpiry.getDate() + safeDays);
+    // Extend from the LATER of today or the current expiry, so renewing never
+    // shortens an active subscription and always pushes an expired one forward.
+    const now = new Date();
+    const base = user.expiryDate ? new Date(user.expiryDate) : now;
+    const start = base > now ? base : now;
+    start.setDate(start.getDate() + safeDays);
 
     return this.usersService.update(id, {
-      expiryDate: currentExpiry.toISOString().split('T')[0],
+      expiryDate: start.toISOString().split('T')[0],
       status: 'Active',
       feeStatus: 'Paid',
     });

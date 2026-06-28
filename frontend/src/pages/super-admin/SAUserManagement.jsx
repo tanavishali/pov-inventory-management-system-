@@ -36,6 +36,16 @@ function addDays(n) {
   return d.toISOString().split('T')[0]
 }
 
+// Renewal extends from the LATER of today or the current expiry, so renewing
+// never shortens an active subscription (and always pushes an expired one forward).
+function extendExpiry(currentExpiry, days) {
+  const now = new Date()
+  const base = currentExpiry ? new Date(currentExpiry) : now
+  const start = (base > now) ? base : now
+  start.setDate(start.getDate() + (parseInt(days) || 0))
+  return start.toISOString().split('T')[0]
+}
+
 function Modal({ isOpen, onClose, children }) {
   if (!isOpen) return null
   return (
@@ -102,7 +112,10 @@ export default function SAUserManagement() {
     if (!newUser.name.trim() || !newUser.email.trim() || !newUser.password.trim()) return
     const isDemo = newUser.status === 'Demo'
     const expiryDate = addDays(isDemo ? parseInt(newUser.demoDays) || 14 : 30)
-    const payload = { name: newUser.name, email: newUser.email, password: newUser.password, plan: newUser.plan, monthlyFee: newUser.monthlyFee, status: newUser.status, expiryDate }
+    const purchasedOn = addDays(0) // subscription start = today
+    // An account the super-admin provisions as Active is treated as paid; Demo/Locked start Unpaid.
+    const feeStatus = newUser.status === 'Active' ? 'Paid' : 'Unpaid'
+    const payload = { name: newUser.name, email: newUser.email, password: newUser.password, plan: newUser.plan, monthlyFee: newUser.monthlyFee, status: newUser.status, expiryDate, purchasedOn, feeStatus }
     try {
       await createAdmin(payload).unwrap()
       setShowCreate(false)
@@ -274,8 +287,8 @@ export default function SAUserManagement() {
                 {/* Details row */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(140px,1fr))', gap: '8px', marginTop: '14px', paddingTop: '12px', borderTop: '1px solid #f1f5f9' }}>
                   {[
-                    { icon: 'calendar-plus', label: 'Purchased On', val: u.purchasedOn },
-                    { icon: 'calendar-xmark', label: 'Expiry Date', val: u.expiryDate },
+                    { icon: 'calendar-plus', label: 'Purchased On', val: u.purchasedOn || '—' },
+                    { icon: 'calendar-xmark', label: 'Expiry Date', val: u.expiryDate || '—' },
                     { icon: 'coins', label: 'Monthly Fee', val: `₨ ${(u.monthlyFee||0).toLocaleString()}` },
                     { icon: 'tag', label: 'Plan', val: u.plan || 'Basic' },
                   ].map(({ icon, label, val }) => (
@@ -399,12 +412,19 @@ export default function SAUserManagement() {
           )}
         </div>
 
-        {newUser.status === 'Demo' && (
-          <div style={{ background: '#fef9c3', border: '1px solid #fde68a', borderRadius: '9px', padding: '10px 13px', fontSize: '12px', color: '#b45309', fontWeight: 600, marginBottom: '14px' }}>
-            <i className="fa-solid fa-hourglass-half" style={{ marginRight: '6px' }} />
-            Demo period: {newUser.demoDays} din — Expiry: {addDays(parseInt(newUser.demoDays) || 14)}
-          </div>
-        )}
+        {(() => {
+          const isDemo = newUser.status === 'Demo'
+          const days = isDemo ? (parseInt(newUser.demoDays) || 14) : 30
+          const tone = isDemo
+            ? { bg: '#fef9c3', border: '#fde68a', color: '#b45309', icon: 'hourglass-half' }
+            : { bg: '#f0f9ff', border: '#bae6fd', color: '#0369a1', icon: 'calendar-check' }
+          return (
+            <div style={{ background: tone.bg, border: `1px solid ${tone.border}`, borderRadius: '9px', padding: '10px 13px', fontSize: '12px', color: tone.color, fontWeight: 600, marginBottom: '14px' }}>
+              <i className={`fa-solid fa-${tone.icon}`} style={{ marginRight: '6px' }} />
+              Purchased: {addDays(0)} · Expiry: {addDays(days)}{isDemo ? ` (${days}-day demo)` : ` (${days}-day subscription)`}
+            </div>
+          )
+        })()}
 
         <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
           <button onClick={() => setShowCreate(false)}
@@ -520,7 +540,7 @@ export default function SAUserManagement() {
 
           <div style={{ background: '#dcfce7', borderRadius: '9px', padding: '10px 13px', fontSize: '12px', color: '#16a34a', fontWeight: 700, marginBottom: '16px' }}>
             <i className="fa-solid fa-calendar-check" style={{ marginRight: '6px' }} />
-            Nai expiry date: {addDays(subDays)}
+            Nai expiry date: {extendExpiry(subUser.expiryDate, subDays)}
           </div>
 
           <div style={{ display: 'flex', gap: '10px' }}>

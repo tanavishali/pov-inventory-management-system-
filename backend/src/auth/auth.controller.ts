@@ -26,6 +26,8 @@ export class AuthController {
     if (!user) {
       throw new UnauthorizedException('Invalid email or password');
     }
+    // Block login when the subscription/plan has expired.
+    await this.authService.assertSubscriptionActive(user);
     return this.authService.login(user);
   }
 
@@ -45,6 +47,8 @@ export class AuthController {
     if (!user) {
       throw new UnauthorizedException('User not found');
     }
+    // Invalidate active sessions once the subscription/plan has expired.
+    await this.authService.assertSubscriptionActive(user.toObject());
     const { password, ...profile } = user.toObject();
     return profile;
   }

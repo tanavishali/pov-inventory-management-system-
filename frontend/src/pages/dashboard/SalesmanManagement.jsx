@@ -281,6 +281,7 @@ export default function SalesmanManagement() {
         await createSalesman(form).unwrap()
       }
       setModal(false)
+      toast.success(editSm ? 'Salesman updated.' : 'Salesman added.')
     } catch (err) {
       console.error('Failed to save salesman:', err)
       setFormErr(err?.data?.message || 'Email already exists or invalid form details.')
@@ -452,7 +453,7 @@ export default function SalesmanManagement() {
 
       {/* ── Results Label ── */}
       <div style={{ fontSize: '12.5px', color: '#94a3b8', marginBottom: '14px' }}>
-        Showing <strong style={{ color: '#1e293b' }}>{filtered.length}</strong> salesman{filtered.length !== 1 ? 'en' : ''}
+        Showing <strong style={{ color: '#1e293b' }}>{filtered.length}</strong> {filtered.length !== 1 ? 'salesmen' : 'salesman'}
       </div>
 
       {/* ── Salesman Grid ── */}

@@ -3,8 +3,8 @@ import { useOutletContext } from 'react-router-dom'
 import { INITIAL_ORDERS } from './OrderManagement'
 import { buildInvoiceHTML } from './InvoiceSystem'
 
-const fmt = n => '₨' + Number(n).toLocaleString('en-PK')
-const orderTotal = o => o.products.reduce((s, p) => s + p.qty * p.price, 0)
+const fmt = n => '₨' + (Number(n) || 0).toLocaleString('en-PK')
+const orderTotal = o => (o.products || []).reduce((s, p) => s + p.qty * p.price, 0)
 
 function parseDate(str) {
   if (!str) return new Date(0)
@@ -196,7 +196,7 @@ export default function InvoiceHistory() {
 
   const DAY_PILLS = [
     { val: 'all', label: 'All Time' },
-    { val: '1',   label: 'Today' },
+    { val: '0',   label: 'Today' },
     { val: '7',   label: '7 Days' },
     { val: '30',  label: '30 Days' },
   ]

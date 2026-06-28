@@ -4,6 +4,7 @@ import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
 import { useGetProfileQuery, useLogoutMutation } from './store/slices/authApiSlice'
 import AuthPage from './pages/AuthPage'
+import LandingPage from './pages/LandingPage'
 import DashboardLayout from './pages/DashboardLayout'
 import DashboardHome from './pages/dashboard/DashboardHome'
 import ProductManagement from './pages/dashboard/ProductManagement'
@@ -39,7 +40,11 @@ export default function App() {
 
   useEffect(() => {
     if (profileData) {
-      setUser(profileData)
+      setUser(prev => {
+        const prevId = prev?._id || prev?.id
+        const newId = profileData._id || profileData.id
+        return prevId === newId ? prev : profileData
+      })
     }
     if (isError) {
       handleLogout()
@@ -77,7 +82,11 @@ export default function App() {
       <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} newestOnTop closeOnClick pauseOnHover theme="light" />
       <Routes>
         {!user ? (
-          <Route path="*" element={<AuthPage onLogin={handleLogin} />} />
+          <>
+            <Route path="/" element={<LandingPage />} />
+            <Route path="/login" element={<AuthPage onLogin={handleLogin} />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </>
         ) : user.status === 'Locked' ? (
           <Route path="*" element={
             <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', padding: '20px', textAlign: 'center' }}>

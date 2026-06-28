@@ -31,6 +31,15 @@ export class CreateAdminDto {
   @ApiProperty({ example: '2024-12-31', required: false })
   @IsOptional()
   expiryDate?: string;
+
+  @ApiProperty({ example: '2024-12-01', required: false })
+  @IsOptional()
+  purchasedOn?: string;
+
+  @ApiProperty({ enum: ['Paid', 'Unpaid', 'Overdue'], required: false })
+  @IsOptional()
+  @IsEnum(['Paid', 'Unpaid', 'Overdue'])
+  feeStatus?: string;
 }
 
 export class UpdateAdminDto {

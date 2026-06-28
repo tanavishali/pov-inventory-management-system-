@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 const cardStyle = {
   background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '14px',
   padding: '22px 24px', boxShadow: '0 1px 3px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.05)',
@@ -29,7 +31,7 @@ function LowStockTable({ lowStockAlerts = [] }) {
           </div>
           <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>Items needing restock</div>
         </div>
-        <a href="#" style={{ fontSize: '12px', color: '#0ea5e9', fontWeight: 600, textDecoration: 'none' }}>View all →</a>
+        <Link to="/products" style={{ fontSize: '12px', color: '#0ea5e9', fontWeight: 600, textDecoration: 'none' }}>View all →</Link>
       </div>
       <table style={{ width: '100%', borderCollapse: 'collapse' }}>
         <thead>

@@ -2,8 +2,8 @@ import { useState, useMemo } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { INITIAL_ORDERS } from './OrderManagement'
 
-const fmt = n => '₨' + Number(n).toLocaleString('en-PK')
-const orderTotal = o => o.products.reduce((s, p) => s + p.qty * p.price, 0)
+const fmt = n => '₨' + (Number(n) || 0).toLocaleString('en-PK')
+const orderTotal = o => (o.products || []).reduce((s, p) => s + p.qty * p.price, 0)
 
 const STATUS_COLORS = {
   pending:    { bg: '#fef9c3', color: '#b45309' },

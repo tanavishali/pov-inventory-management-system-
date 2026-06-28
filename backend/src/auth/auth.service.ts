@@ -19,6 +19,37 @@ export class AuthService {
     return null;
   }
 
+  /**
+   * Blocks access when a tenant's subscription has expired.
+   * - super-admin never expires
+   * - admin uses its own expiryDate
+   * - salesman inherits the parent admin's (shopId) expiryDate
+   * Accounts without an expiryDate are treated as not expired.
+   */
+  async assertSubscriptionActive(user: any): Promise<void> {
+    if (!user || user.role === 'super-admin') return;
+
+    let expiry = user.expiryDate;
+    if (user.role === 'salesman' && user.shopId) {
+      const owner = await this.usersService.findById(user.shopId.toString());
+      expiry = owner?.expiryDate;
+    }
+    if (!expiry) return;
+
+    const exp = new Date(expiry);
+    if (isNaN(exp.getTime())) return;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Valid through the expiry date itself; expired only once it is in the past.
+    if (exp < today) {
+      throw new UnauthorizedException(
+        'Your subscription has expired. Please contact the administrator to renew your plan.',
+      );
+    }
+  }
+
   async login(user: any) {
     const payload = { email: user.email, sub: user._id, role: user.role };
     return {
@@ -29,6 +60,9 @@ export class AuthService {
         email: user.email,
         role: user.role,
         status: user.status,
+        plan: user.plan,
+        feeStatus: user.feeStatus,
+        expiryDate: user.expiryDate,
       },
     };
   }

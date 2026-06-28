@@ -51,8 +51,8 @@ function StatCard({ borderColor, iconBg, iconColor, icon, bgIcon, bgIconColor, l
 function SalesBarChart({ monthlyRevenue, monthlyOrders }) {
   const [tooltip, setTooltip] = useState(null)
 
-  const revenue = monthlyRevenue ?? Array(12).fill(0)
-  const orders  = monthlyOrders  ?? Array(12).fill(0)
+  const revenue = (monthlyRevenue && monthlyRevenue.length) ? monthlyRevenue : Array(12).fill(0)
+  const orders  = (monthlyOrders  && monthlyOrders.length)  ? monthlyOrders  : Array(12).fill(0)
 
   const W = 580, H = 220
   const PAD = { top: 16, right: 50, bottom: 32, left: 56 }
@@ -278,9 +278,11 @@ export default function Reports() {
     MONTHS.forEach((m, i) => { csv += `${m},${rev[i]},${ords[i]}\n` })
     const blob = new Blob([csv], { type: 'text/csv' })
     const a    = document.createElement('a')
-    a.href     = URL.createObjectURL(blob)
+    const url  = URL.createObjectURL(blob)
+    a.href     = url
     a.download = 'wholesalepro_report.csv'
     a.click()
+    URL.revokeObjectURL(url)
   }
 
   const rangeBtns = [

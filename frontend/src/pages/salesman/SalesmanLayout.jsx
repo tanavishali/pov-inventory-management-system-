@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom'
-import { INITIAL_PRODUCTS } from '../dashboard/ProductManagement'
+import { useGetProductsQuery } from '../../store/slices/productsApiSlice'
 import GlobalLoader from '../../components/ui/GlobalLoader'
 
 export default function SalesmanLayout({ user, onLogout }) {
@@ -10,6 +10,10 @@ export default function SalesmanLayout({ user, onLogout }) {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768)
   const [bellOpen, setBellOpen] = useState(false)
   const bellRef = useRef(null)
+
+  // Live stock alerts from the backend (was previously bound to an empty constant
+  // so the bell never showed anything).
+  const { data: dbProducts = [] } = useGetProductsQuery()
 
   useEffect(() => {
     const handleResize = () => {
@@ -38,9 +42,10 @@ export default function SalesmanLayout({ user, onLogout }) {
     return <Navigate to="/dashboard" replace />
   }
 
-  const outOfStock = INITIAL_PRODUCTS.filter(p => p.stock === 0)
-  const lowStock = INITIAL_PRODUCTS.filter(p => p.stock > 0 && p.stock <= p.threshold)
-  const allAlerts = INITIAL_PRODUCTS.filter(p => p.stock === 0 || p.stock <= p.threshold)
+  const thresholdOf = p => (p.threshold !== undefined && p.threshold !== null ? Number(p.threshold) : 10)
+  const outOfStock = dbProducts.filter(p => p.stock === 0)
+  const lowStock = dbProducts.filter(p => p.stock > 0 && p.stock <= thresholdOf(p))
+  const allAlerts = dbProducts.filter(p => p.stock === 0 || p.stock <= thresholdOf(p))
 
   const navItems = [
     { label: 'Dashboard',     path: '/salesman',         icon: 'gauge-high' },

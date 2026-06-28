@@ -21,9 +21,9 @@ const METHOD_ICON = {
 }
 
 const inpStyle = {
-  padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: '9px',
+  width: '100%', padding: '10px 13px', border: '1.5px solid #e2e8f0', borderRadius: '9px',
   fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: '13px',
-  color: '#1e293b', background: '#fff', outline: 'none',
+  color: '#1e293b', background: '#fff', outline: 'none', boxSizing: 'border-box',
 }
 
 function Modal({ isOpen, onClose, children }) {
@@ -39,7 +39,7 @@ function Modal({ isOpen, onClose, children }) {
 }
 
 export default function SAPayments() {
-  const { data: payments = [], isLoading } = useGetPaymentsQuery()
+  const { data: payments = [], isLoading, isError, refetch } = useGetPaymentsQuery()
   const [createPayment] = useCreatePaymentMutation()
   const [markPaymentPaid] = useMarkPaymentPaidMutation()
   const [deletePaymentMutation] = useDeletePaymentMutation()
@@ -55,7 +55,7 @@ export default function SAPayments() {
     const q = search.toLowerCase()
     return payments.filter(p => {
       const ms = filterStatus === 'all' || p.status === filterStatus
-      const mq = !q || p.shop.toLowerCase().includes(q) || p.email.toLowerCase().includes(q) || p.id.toLowerCase().includes(q)
+      const mq = !q || p.shop?.toLowerCase().includes(q) || p.email?.toLowerCase().includes(q) || p.id?.toLowerCase().includes(q)
       return ms && mq
     })
   }, [payments, search, filterStatus])
@@ -71,26 +71,29 @@ export default function SAPayments() {
       setMarkModal(null)
       toast.success('Payment marked as paid.')
     } catch (err) {
-      toast.error('Payment mark karne mein galti hui: ' + (err.data?.message || err.error))
+      const msg = Array.isArray(err.data?.message) ? err.data.message.join(', ') : (err.data?.message || err.error || 'Unknown error')
+      toast.error('Payment mark karne mein galti hui: ' + msg)
     }
   }
 
   const handleAdd = async () => {
     if (!newPay.shop.trim() || !newPay.amount) return
     try {
-      await createPayment({
+      const payload = {
         shop: newPay.shop,
-        email: newPay.email,
         amount: parseInt(newPay.amount) || 0,
         plan: newPay.plan,
         method: newPay.method,
         month: newPay.month,
-      }).unwrap()
+      }
+      if (newPay.email.trim()) payload.email = newPay.email.trim()
+      await createPayment(payload).unwrap()
       setAddModal(false)
       setNewPay({ shop: '', email: '', amount: '', plan: 'Basic', method: 'EasyPaisa', month: '' })
       toast.success('Payment record added.')
     } catch (err) {
-      toast.error('Payment add karne mein galti hui: ' + (err.data?.message || err.error))
+      const msg = Array.isArray(err.data?.message) ? err.data.message.join(', ') : (err.data?.message || err.error || 'Unknown error')
+      toast.error('Payment add karne mein galti hui: ' + msg)
     }
   }
 
@@ -113,6 +116,17 @@ export default function SAPayments() {
     <div style={{ textAlign: 'center', padding: '80px 20px', color: '#64748b' }}>
       <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '36px', color: '#0ea5e9', marginBottom: '14px', display: 'block' }} />
       <div style={{ fontWeight: 600 }}>Loading payments...</div>
+    </div>
+  )
+
+  if (isError) return (
+    <div style={{ textAlign: 'center', padding: '80px 20px' }}>
+      <i className="fa-solid fa-triangle-exclamation" style={{ fontSize: '40px', color: '#ef4444', marginBottom: '14px', display: 'block' }} />
+      <div style={{ fontWeight: 700, color: '#1e293b', fontSize: '16px', marginBottom: '6px' }}>Payments load nahi ho sake</div>
+      <div style={{ color: '#64748b', fontSize: '13px', marginBottom: '20px' }}>Server se connection mein masla hua. Backend check karein.</div>
+      <button onClick={refetch} style={{ padding: '10px 24px', borderRadius: '9px', background: '#0ea5e9', color: '#fff', border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '13px' }}>
+        <i className="fa-solid fa-arrows-rotate" style={{ marginRight: '7px' }} />Dobara Try Karein
+      </button>
     </div>
   )
 
@@ -209,7 +223,7 @@ export default function SAPayments() {
                     </div>
                     <div>
                       <div style={{ fontWeight: 800, fontSize: '14px', color: '#1e293b' }}>{p.shop}</div>
-                      <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{p.email}</div>
+                      {p.email && <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{p.email}</div>}
                       <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
                         <span style={{ background: '#f1f5f9', borderRadius: '5px', padding: '1px 6px', fontWeight: 600 }}>{p.id}</span>
                         &nbsp;·&nbsp;{p.month}

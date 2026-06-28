@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { useOutletContext } from 'react-router-dom'
+import { toast } from 'react-toastify'
 import { useGetProductsQuery } from '../../store/slices/productsApiSlice'
+import { useUpdateOrderMutation, useDeleteOrderMutation } from '../../store/slices/ordersApiSlice'
 
 const fmtOrderId = id => {
   if (!id) return '—'
@@ -278,6 +280,9 @@ export default function SalesmanHistory() {
   const [search, setSearch] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState(null)
 
+  const [updateOrder] = useUpdateOrderMutation()
+  const [deleteOrder] = useDeleteOrderMutation()
+
   const myOrders = orders.filter(o => o.salesmanEmail === user?.email)
 
   const filtered = myOrders.filter(o => {
@@ -285,22 +290,55 @@ export default function SalesmanHistory() {
     return !q || o.shopName.toLowerCase().includes(q) || o.id.toLowerCase().includes(q)
   })
 
-  function handleSave(updated) {
+  async function handleSave(updated) {
+    // Update the local (offline) mirror first
     const newOrders = orders.map(o => o.id === updated.id ? updated : o)
     setOrders(newOrders)
     localStorage.setItem('salesman_orders', JSON.stringify(newOrders))
     setEditOrder(null)
+
+    // Keep the canonical backend order in sync (best-effort)
+    if (updated.backendId) {
+      try {
+        await updateOrder({
+          id: updated.backendId,
+          payment: updated.payment,
+          advance: updated.advance || 0,
+          products: (updated.products || []).map(p => ({
+            name: p.name, qty: p.qty, price: p.price, ctn: p.ctn || 0,
+          })),
+        }).unwrap()
+        toast.success('Order updated.')
+      } catch (err) {
+        toast.warn('Saved on this device, but server sync failed — please retry when online.')
+      }
+    } else {
+      toast.success('Order updated.')
+    }
   }
 
   function handleDelete(id) {
     setDeleteConfirm(id)
   }
 
-  function confirmDelete() {
+  async function confirmDelete() {
+    const target = orders.find(o => o.id === deleteConfirm)
     const newOrders = orders.filter(o => o.id !== deleteConfirm)
     setOrders(newOrders)
     localStorage.setItem('salesman_orders', JSON.stringify(newOrders))
     setDeleteConfirm(null)
+
+    // Remove the canonical backend order too (best-effort)
+    if (target?.backendId) {
+      try {
+        await deleteOrder(target.backendId).unwrap()
+        toast.success('Order deleted.')
+      } catch (err) {
+        toast.warn('Deleted on this device, but server sync failed — please retry when online.')
+      }
+    } else {
+      toast.success('Order deleted.')
+    }
   }
 
   return (

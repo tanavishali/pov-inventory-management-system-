@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 const badgeStyles = {
   ok:  { background: '#dcfce7', color: '#16a34a' },
   mid: { background: '#fef9c3', color: '#b45309' },
@@ -17,7 +19,7 @@ export default function RecentOrders({ recentOrders = [] }) {
           <div style={{ fontFamily: "'Outfit', sans-serif", fontWeight: 700, fontSize: '15px', color: '#1e293b' }}>Recent Orders</div>
           <div style={{ fontSize: '12px', color: '#94a3b8', marginTop: '2px' }}>Latest transactions</div>
         </div>
-        <a href="#" style={{ fontSize: '12px', color: '#0ea5e9', fontWeight: 600, textDecoration: 'none' }}>View all →</a>
+        <Link to="/orders" style={{ fontSize: '12px', color: '#0ea5e9', fontWeight: 600, textDecoration: 'none' }}>View all →</Link>
       </div>
 
       {/* Desktop table */}

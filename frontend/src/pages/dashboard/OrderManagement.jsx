@@ -903,6 +903,10 @@ function EditOrderModal({ isOpen, order, onClose, onSave, products = [] }) {
 /* ─── Invoice Preview Modal ─── */
 function InvoiceModal({ order, onClose, onPrint }) {
   if (!order) return null
+  const biz = (() => { try { return JSON.parse(localStorage.getItem('wholesale_biz') || '{}') } catch { return {} } })()
+  const bizName    = biz.name    || 'WholesalePro'
+  const bizPhone   = biz.phone   || '03287458137'
+  const bizAddress = biz.address || 'Wholesale Distribution Center'
   const total = orderTotal(order)
   const advAmt = order.payment === 'Udaar' ? (order.advance || 0) : 0
   const baki = Math.max(0, total - advAmt)
