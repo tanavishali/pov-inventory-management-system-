@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { toast } from 'react-toastify'
+import { confirmToast } from '../../utils/confirmToast'
 import {
   useGetAdminsQuery,
   useCreateAdminMutation,
@@ -79,14 +81,21 @@ export default function SAUserManagement() {
 
   /* ── Actions ── */
   const setStatus = async (id, status) => {
-    try { await updateAdmin({ id, status }).unwrap() }
-    catch (e) { alert('Status update failed: ' + (e?.data?.message || e.message)) }
+    try {
+      await updateAdmin({ id, status }).unwrap()
+      toast.success('Status updated.')
+    }
+    catch (e) { toast.error('Status update failed: ' + (e?.data?.message || e.message)) }
   }
 
   const deleteUser = async (id) => {
-    if (!window.confirm('Is account ko permanently delete karna chahte hain?')) return
-    try { await deleteAdmin(id).unwrap() }
-    catch (e) { alert('Delete failed: ' + (e?.data?.message || e.message)) }
+    const ok = await confirmToast('Is account ko permanently delete karna chahte hain?')
+    if (!ok) return
+    try {
+      await deleteAdmin(id).unwrap()
+      toast.success('Account deleted.')
+    }
+    catch (e) { toast.error('Delete failed: ' + (e?.data?.message || e.message)) }
   }
 
   const handleCreate = async () => {
@@ -98,8 +107,8 @@ export default function SAUserManagement() {
       await createAdmin(payload).unwrap()
       setShowCreate(false)
       setNewUser({ name: '', email: '', password: '', plan: 'Basic', monthlyFee: 1500, status: 'Active', demoDays: 14 })
-      alert(`Account ban gaya!\nEmail: ${newUser.email}\nPassword: ${newUser.password}`)
-    } catch (e) { alert('Create failed: ' + (e?.data?.message || e.message)) }
+      toast.success(`Account ban gaya! Email: ${newUser.email}`)
+    } catch (e) { toast.error('Create failed: ' + (e?.data?.message || e.message)) }
   }
 
   const handleEdit = async () => {
@@ -122,7 +131,8 @@ export default function SAUserManagement() {
       await updateAdmin({ id, ...payload }).unwrap()
       setEditUser(null)
       setEditNewPassword('')
-    } catch (e) { alert('Update failed: ' + (e?.data?.message || JSON.stringify(e?.data) || e.message)) }
+      toast.success('Account updated.')
+    } catch (e) { toast.error('Update failed: ' + (e?.data?.message || JSON.stringify(e?.data) || e.message)) }
   }
 
   const handleSub = async () => {
@@ -130,7 +140,8 @@ export default function SAUserManagement() {
     try {
       await renewAdmin({ id: subUser._id || subUser.id, days }).unwrap()
       setSubUser(null)
-    } catch (e) { alert('Renew failed: ' + (e?.data?.message || e.message)) }
+      toast.success('Subscription renewed.')
+    } catch (e) { toast.error('Renew failed: ' + (e?.data?.message || e.message)) }
   }
 
   const counts = {

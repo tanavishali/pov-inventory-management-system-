@@ -1,4 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
+import { toast } from 'react-toastify'
+import { confirmToast } from '../../utils/confirmToast'
 import {
   useGetSalesmenQuery,
   useCreateSalesmanMutation,
@@ -56,7 +58,7 @@ function PwdDisplay({ password }) {
   const [show, setShow] = useState(false)
   return (
     <div onClick={() => setShow(p => !p)}
-      style={{ cursor: 'pointer', userSelect: 'none', fontSize: '12.5px', fontWeight: 600, color: '#1e293b', fontFamily: "'Outfit',sans-serif", letterSpacing: '.3px', wordBreak: 'break-all', display: 'flex', alignItems: 'center', gap: '5px' }}
+      style={{ cursor: 'pointer', userSelect: 'none', fontSize: '12.5px', fontWeight: 600, color: '#1e293b', fontFamily: "'Outfit',sans-serif", letterSpacing: '.3px', display: 'flex', alignItems: 'center', gap: '5px' }}
     >
       <span>{show ? (password || '••••••••') : '••••••••'}</span>
       <i className={`fa-solid ${show ? 'fa-eye-slash' : 'fa-eye'}`} style={{ fontSize: '11px', color: '#94a3b8' }} />
@@ -150,7 +152,7 @@ function SalesmanCard({ sm, onEdit, onToggleBlock, onDelete }) {
             <div style={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '3px', display: 'flex', alignItems: 'center', gap: '4px' }}>
               <i className="fa-solid fa-key" /> Password
             </div>
-            <PwdDisplay password={sm.password} />
+            <PwdDisplay password={sm.plainPassword} />
           </div>
         </div>
 
@@ -217,13 +219,17 @@ const focusOut = e => { e.target.style.borderColor = '#e2e8f0'; e.target.style.b
 
 /* ─── Main Component ─── */
 export default function SalesmanManagement() {
-  const { data: salesmen = [], isLoading, error: fetchErr, refetch } = useGetSalesmenQuery()
+  const [search,   setSearch]   = useState('')
+  const [filter,   setFilter]   = useState('all')
+
+  // Filtered list — backend does the filtering
+  const { data: filtered = [], isLoading, error: fetchErr, refetch } = useGetSalesmenQuery({ search, status: filter })
+  // Unfiltered for counts
+  const { data: allSalesmen = [] } = useGetSalesmenQuery({})
+
   const [createSalesman] = useCreateSalesmanMutation()
   const [updateSalesman] = useUpdateSalesmanMutation()
   const [deleteSalesman] = useDeleteSalesmanMutation()
-
-  const [search,   setSearch]   = useState('')
-  const [filter,   setFilter]   = useState('all')
 
   /* Modal state */
   const [modal,   setModal]   = useState(false)
@@ -232,26 +238,8 @@ export default function SalesmanManagement() {
   const [formErr, setFormErr] = useState('')
   const [showPwd, setShowPwd] = useState(false)
 
-  /* ── Filtered list ── */
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase()
-    return salesmen.filter(s => {
-      let matchesFilter = true
-      if (filter === 'active') {
-        matchesFilter = s.status === 'Active' || s.status === 'active'
-      } else if (filter === 'blocked') {
-        matchesFilter = s.status === 'Locked' || s.status === 'blocked'
-      }
-      const matchesSearch = !q || 
-        s.name?.toLowerCase().includes(q) || 
-        s.email?.toLowerCase().includes(q) || 
-        s.phone?.includes(q) 
-      return matchesFilter && matchesSearch
-    })
-  }, [salesmen, search, filter])
-
-  const activeCnt  = salesmen.filter(s => s.status === 'Active' || s.status === 'active').length
-  const totalSales = salesmen.reduce((a, s) => a + Number(s.sales || 0), 0)
+  const activeCnt  = allSalesmen.filter(s => s.status === 'Active' || s.status === 'active').length
+  const totalSales = allSalesmen.reduce((a, s) => a + Number(s.sales || 0), 0)
 
   /* ── Handlers ── */
   function openAdd() {
@@ -303,25 +291,24 @@ export default function SalesmanManagement() {
     const isActive = sm.status === 'Active' || sm.status === 'active'
     const targetStatus = isActive ? 'Locked' : 'Active'
     const action = isActive ? 'block' : 'unblock'
-    if (!confirm(`Are you sure you want to ${action} "${sm.name}"?`)) return
+    const ok = await confirmToast(`"${sm.name}" ko ${action} karna chahte hain?`, { confirmLabel: isActive ? 'Yes, Block' : 'Yes, Unblock', confirmColor: isActive ? '#ef4444' : '#10b981' })
+    if (!ok) return
     try {
-      await updateSalesman({
-        id: sm._id || sm.id,
-        status: targetStatus
-      }).unwrap()
-    } catch (err) {
-      console.error('Failed to toggle status:', err)
-      alert('Failed to update status.')
+      await updateSalesman({ id: sm._id || sm.id, status: targetStatus }).unwrap()
+      toast.success(`Salesman ${action}ed.`)
+    } catch {
+      toast.error('Failed to update status.')
     }
   }
 
   async function handleDeleteSalesman(sm) {
-    if (!confirm(`Delete "${sm.name}"? This cannot be undone.`)) return
+    const ok = await confirmToast(`Delete "${sm.name}"? This cannot be undone.`)
+    if (!ok) return
     try {
       await deleteSalesman(sm._id || sm.id).unwrap()
-    } catch (err) {
-      console.error('Failed to delete salesman:', err)
-      alert('Failed to delete salesman account.')
+      toast.success('Salesman deleted.')
+    } catch {
+      toast.error('Failed to delete salesman account.')
     }
   }
 

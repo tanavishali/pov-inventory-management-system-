@@ -4,7 +4,13 @@ export const salesmanApiSlice = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
     // GET /salesman - list all salesmen for the current tenant shop
     getSalesmen: builder.query({
-      query: () => '/salesman',
+      query: ({ search, status } = {}) => {
+        const sp = new URLSearchParams()
+        if (search) sp.set('search', search)
+        if (status && status !== 'all') sp.set('status', status)
+        const qs = sp.toString()
+        return qs ? `/salesman?${qs}` : '/salesman'
+      },
       providesTags: ['Salesman'],
     }),
 

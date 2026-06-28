@@ -181,15 +181,11 @@ export default function InvoiceHistory() {
   }, [historyOrders, search, filterStatus, filterPayment, dayFilter])
 
   const handlePrint = (order) => {
-    const html   = buildInvoiceHTML(order)
-    const iframe = document.createElement('iframe')
-    iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;'
-    document.body.appendChild(iframe)
-    iframe.contentDocument.open()
-    iframe.contentDocument.write(html)
-    iframe.contentDocument.close()
-    iframe.contentWindow.focus()
-    setTimeout(() => { iframe.contentWindow.print(); setTimeout(() => document.body.removeChild(iframe), 1000) }, 300)
+    const html = buildInvoiceHTML(order)
+    const blob = new Blob([html], { type: 'text/html' })
+    const url  = URL.createObjectURL(blob)
+    window.open(url, '_blank')
+    setTimeout(() => URL.revokeObjectURL(url), 10000)
   }
 
   const selStyle = {

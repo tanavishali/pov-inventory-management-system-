@@ -1,4 +1,6 @@
 import { useState, useMemo } from 'react'
+import { toast } from 'react-toastify'
+import { confirmToast } from '../../utils/confirmToast'
 import {
   useGetPaymentsQuery,
   useCreatePaymentMutation,
@@ -67,9 +69,9 @@ export default function SAPayments() {
     try {
       await markPaymentPaid({ id: markModal.id, method: markMethod }).unwrap()
       setMarkModal(null)
+      toast.success('Payment marked as paid.')
     } catch (err) {
-      console.error('Failed to mark payment as paid:', err)
-      alert('Payment mark karne mein galti hui: ' + (err.data?.message || err.error || JSON.stringify(err)))
+      toast.error('Payment mark karne mein galti hui: ' + (err.data?.message || err.error))
     }
   }
 
@@ -86,20 +88,20 @@ export default function SAPayments() {
       }).unwrap()
       setAddModal(false)
       setNewPay({ shop: '', email: '', amount: '', plan: 'Basic', method: 'EasyPaisa', month: '' })
+      toast.success('Payment record added.')
     } catch (err) {
-      console.error('Failed to create payment:', err)
-      alert('Payment add karne mein galti hui: ' + (err.data?.message || err.error || JSON.stringify(err)))
+      toast.error('Payment add karne mein galti hui: ' + (err.data?.message || err.error))
     }
   }
 
   const deletePayment = async (id) => {
-    if (window.confirm('Is payment record ko delete karna chahte hain?')) {
-      try {
-        await deletePaymentMutation(id).unwrap()
-      } catch (err) {
-        console.error('Failed to delete payment:', err)
-        alert('Payment delete karne mein galti hui: ' + (err.data?.message || err.error || JSON.stringify(err)))
-      }
+    const ok = await confirmToast('Is payment record ko delete karna chahte hain?')
+    if (!ok) return
+    try {
+      await deletePaymentMutation(id).unwrap()
+      toast.success('Payment deleted.')
+    } catch (err) {
+      toast.error('Payment delete karne mein galti hui: ' + (err.data?.message || err.error))
     }
   }
 

@@ -4,7 +4,13 @@ export const shopsApiSlice = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
     // GET /shops - list all customer shops for current tenant
     getShops: builder.query({
-      query: () => '/shops',
+      query: ({ search, status } = {}) => {
+        const sp = new URLSearchParams()
+        if (search) sp.set('search', search)
+        if (status && status !== 'all') sp.set('status', status)
+        const qs = sp.toString()
+        return qs ? `/shops?${qs}` : '/shops'
+      },
       providesTags: ['Shop'],
     }),
 

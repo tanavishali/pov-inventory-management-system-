@@ -19,6 +19,11 @@ jspm_packages/
 # Env files
 .env
 
+# WhatsApp Baileys session data
+disk/
+session/
+auth_info_baileys/
+
 # Editor directories and files
 .vscode/
 .idea/

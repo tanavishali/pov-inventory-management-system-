@@ -1,4 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
+import { toast } from 'react-toastify'
+import { confirmToast } from '../../utils/confirmToast'
 import {
   useGetShopsQuery,
   useCreateShopMutation,
@@ -172,13 +174,17 @@ function ModalInput({ label, icon, ...props }) {
 
 /* ─── Main Component ─── */
 export default function ShopsManagement() {
-  const { data: shops = [], isLoading, isError, refetch } = useGetShopsQuery();
+  const [search, setSearch] = useState('')
+  const [filter, setFilter] = useState('all')
+
+  // Filtered list — backend does the filtering
+  const { data: filtered = [], isLoading, isError, refetch } = useGetShopsQuery({ search, status: filter })
+  // Unfiltered counts for the tab badges
+  const { data: allShops = [] } = useGetShopsQuery({})
+
   const [createShop] = useCreateShopMutation();
   const [updateShop] = useUpdateShopMutation();
   const [deleteShop] = useDeleteShopMutation();
-
-  const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState('all')
 
   // Add/Edit Modal
   const [shopModal, setShopModal] = useState(false)
@@ -190,19 +196,9 @@ export default function ShopsManagement() {
   const [viewModal, setViewModal] = useState(false)
   const [viewShopData, setViewShopData] = useState(null)
 
-  /* ── Filtered shops ── */
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase()
-    return shops.filter(s => {
-      const matchFilter = filter === 'all' || s.status === filter
-      const matchQ = !q || s.name.toLowerCase().includes(q) || s.owner.toLowerCase().includes(q) || s.city.toLowerCase().includes(q) || s.phone.includes(q)
-      return matchFilter && matchQ
-    })
-  }, [shops, search, filter])
-
-  const totalShops   = shops.length
-  const activeShops  = shops.filter(s => s.status === 'active').length
-  const blockedShops = shops.filter(s => s.status === 'blocked').length
+  const totalShops   = allShops.length
+  const activeShops  = allShops.filter(s => s.status === 'active').length
+  const blockedShops = allShops.filter(s => s.status === 'blocked').length
 
   /* ── Handlers ── */
   function openAdd() {
@@ -224,9 +220,31 @@ export default function ShopsManagement() {
     setViewModal(true)
   }
 
+  function handlePhoneChange(e) {
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 11)
+    setForm(p => ({ ...p, phone: digits }))
+  }
+
+  function handleCnicChange(e) {
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 13)
+    let formatted = digits
+    if (digits.length > 5 && digits.length <= 12) formatted = digits.slice(0, 5) + '-' + digits.slice(5)
+    else if (digits.length === 13) formatted = digits.slice(0, 5) + '-' + digits.slice(5, 12) + '-' + digits.slice(12)
+    setForm(p => ({ ...p, cnic: formatted }))
+  }
+
   async function confirmShop() {
     if (!form.name.trim() || !form.owner.trim() || !form.phone.trim()) {
       setFormError('Shop name, owner name and phone are required.')
+      return
+    }
+    const phoneDigits = form.phone.replace(/\D/g, '')
+    if (phoneDigits.length !== 11 || !phoneDigits.startsWith('0')) {
+      setFormError('Phone number must be 11 digits starting with 0 (e.g. 03067251356).')
+      return
+    }
+    if (form.cnic && form.cnic.replace(/\D/g, '').length !== 13) {
+      setFormError('CNIC must be 13 digits (e.g. 35302-3571163-3).')
       return
     }
     setFormError('')
@@ -245,29 +263,27 @@ export default function ShopsManagement() {
 
   async function toggleBlock(shop) {
     const action = shop.status === 'active' ? 'block' : 'unblock'
-    if (!confirm(`Are you sure you want to ${action} "${shop.name}"?`)) return
+    const ok = await confirmToast(`"${shop.name}" ko ${action} karna chahte hain?`, { confirmLabel: action === 'block' ? 'Yes, Block' : 'Yes, Unblock', confirmColor: action === 'block' ? '#ef4444' : '#10b981' })
+    if (!ok) return
     try {
-      const nextStatus = shop.status === 'active' ? 'blocked' : 'active';
-      await updateShop({ id: shop.id, status: nextStatus }).unwrap();
-      if (viewShopData?.id === shop.id) {
-        setViewShopData(prev => ({ ...prev, status: nextStatus }));
-      }
-    } catch (err) {
-      console.error(err)
-      alert('Error updating status.')
+      const nextStatus = shop.status === 'active' ? 'blocked' : 'active'
+      await updateShop({ id: shop.id, status: nextStatus }).unwrap()
+      if (viewShopData?.id === shop.id) setViewShopData(prev => ({ ...prev, status: nextStatus }))
+      toast.success(`Shop ${action}ed.`)
+    } catch {
+      toast.error('Error updating status.')
     }
   }
 
   async function handleDeleteShop(shop) {
-    if (!confirm(`Delete "${shop.name}"? This cannot be undone.`)) return
+    const ok = await confirmToast(`Delete "${shop.name}"? This cannot be undone.`)
+    if (!ok) return
     try {
-      await deleteShop(shop.id).unwrap();
-      if (viewShopData?.id === shop.id) {
-        setViewModal(false)
-      }
-    } catch (err) {
-      console.error(err)
-      alert('Error deleting shop.')
+      await deleteShop(shop.id).unwrap()
+      if (viewShopData?.id === shop.id) setViewModal(false)
+      toast.success('Shop deleted.')
+    } catch {
+      toast.error('Error deleting shop.')
     }
   }
 
@@ -456,9 +472,9 @@ export default function ShopsManagement() {
             <ModalInput label="Shop Name" icon="store" placeholder="e.g. Hassan Electronics Store" value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
           </div>
           <ModalInput label="Owner Name" icon="user" placeholder="e.g. Ali Hassan" value={form.owner} onChange={e => setForm(p => ({ ...p, owner: e.target.value }))} />
-          <ModalInput label="Phone Number" icon="phone" placeholder="+92 300 1234567" value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))} />
+          <ModalInput label="Phone Number" icon="phone" placeholder="03067251356" value={form.phone} onChange={handlePhoneChange} inputMode="numeric" maxLength={11} />
           <div style={{ gridColumn: '1/-1' }}>
-            <ModalInput label="CNIC" icon="id-card" placeholder="42101-1234567-1" value={form.cnic} onChange={e => setForm(p => ({ ...p, cnic: e.target.value }))} />
+            <ModalInput label="CNIC" icon="id-card" placeholder="35302-3571163-3" value={form.cnic} onChange={handleCnicChange} inputMode="numeric" maxLength={15} />
           </div>
           <div style={{ gridColumn: '1/-1' }}>
             <ModalInput label="Address" icon="location-dot" placeholder="e.g. Main Market, Mall Road" value={form.address} onChange={e => setForm(p => ({ ...p, address: e.target.value }))} />

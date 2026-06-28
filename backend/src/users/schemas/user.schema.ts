@@ -46,6 +46,9 @@ export class User {
 
   // Salesman Specific Fields
   @Prop()
+  plainPassword?: string;
+
+  @Prop()
   phone?: string;
 
   @Prop()

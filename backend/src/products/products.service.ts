@@ -14,9 +14,28 @@ export class ProductsService {
     private readonly stockGateway: StockGateway,
   ) {}
 
-  async findAll(shopId: Types.ObjectId | string): Promise<ProductDocument[]> {
+  async findAll(shopId: Types.ObjectId | string, search?: string, filter?: string, sort?: string): Promise<ProductDocument[]> {
     const sId = typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
-    return this.productModel.find({ shopId: sId }).sort({ id: 1 }).exec();
+    const query: any = { shopId: sId };
+    if (search) {
+      const re = new RegExp(search, 'i');
+      query.$or = [{ name: re }, { cat: re }];
+    }
+    if (filter === 'out') {
+      query.stock = 0;
+    } else if (filter === 'low') {
+      query.$expr = { $and: [{ $gt: ['$stock', 0] }, { $lte: ['$stock', { $ifNull: ['$threshold', 10] }] }] };
+    } else if (filter === 'in-stock') {
+      query.$expr = { $gt: ['$stock', { $ifNull: ['$threshold', 10] }] };
+    }
+    const sortMap: Record<string, any> = {
+      name:      { name: 1 },
+      'price-h': { selling: -1 },
+      'price-l': { selling: 1 },
+      'stock-l': { stock: 1 },
+    };
+    const sortOpt = (sort && sortMap[sort]) || { id: 1 };
+    return this.productModel.find(query).sort(sortOpt).exec();
   }
 
   async create(shopId: Types.ObjectId | string, createProductDto: CreateProductDto): Promise<ProductDocument> {

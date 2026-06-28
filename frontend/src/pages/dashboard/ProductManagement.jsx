@@ -1,4 +1,6 @@
-import { useState, useMemo } from 'react'
+import { useState } from 'react'
+import { toast } from 'react-toastify'
+import { confirmToast } from '../../utils/confirmToast'
 import {
   useGetProductsQuery,
   useCreateProductMutation,
@@ -8,9 +10,25 @@ import {
 export const INITIAL_PRODUCTS = []
 
 const CATEGORIES = [
-  'Grains', 'Spices', 'Oil & Ghee', 'Snacks', 'Beverages',
-  'Sweets', 'Cleaning', 'Personal Care', 'Packed Food',
-  'Baby Products', 'Dairy', 'Frozen',
+  // Food & Grocery
+  'Grains', 'Flour & Atta', 'Rice', 'Pulses & Lentils', 'Spices', 'Salt & Sugar',
+  'Oil & Ghee', 'Sauces & Condiments', 'Pickles & Chutneys',
+  // Beverages
+  'Beverages', 'Juices', 'Tea & Coffee', 'Water & Drinks',
+  // Snacks & Sweets
+  'Snacks', 'Biscuits & Cookies', 'Sweets', 'Chocolates & Candies', 'Dry Fruits & Nuts',
+  // Dairy & Bakery
+  'Dairy', 'Eggs', 'Bread & Bakery', 'Frozen',
+  // Household
+  'Cleaning', 'Detergent & Soap', 'Kitchen Supplies', 'Plastic & Bags',
+  // Personal Care
+  'Personal Care', 'Cosmetics', 'Health & Medicine',
+  // Baby & Kids
+  'Baby Products', 'Baby Food',
+  // Packed & Instant
+  'Packed Food', 'Instant Noodles', 'Canned Food',
+  // Other
+  'Stationery', 'Mobile Accessories', 'Other',
 ]
 
 const fmt = n => '₨' + Number(n).toLocaleString('en-PK')
@@ -260,7 +278,7 @@ function FieldInput({ label, children }) {
 }
 
 /* ─── ADD MODAL ─── */
-function AddModal({ isOpen, onClose, onAdd }) {
+function AddModal({ isOpen, onClose, onAdd, isLoading }) {
   const [form, setForm] = useState({ name: '', cat: '', purchase: '', selling: '', stock: '', threshold: '10', ctn: '' })
   const [error, setError] = useState('')
 
@@ -268,6 +286,7 @@ function AddModal({ isOpen, onClose, onAdd }) {
 
   const handleAdd = () => {
     if (!form.name.trim() || !form.cat) { setError('Product name and category are required.'); return }
+    setError('')
     onAdd({
       name: form.name.trim(), cat: form.cat,
       purchase:  parseInt(form.purchase)  || 0,
@@ -276,9 +295,6 @@ function AddModal({ isOpen, onClose, onAdd }) {
       threshold: parseInt(form.threshold) || 10,
       ctn:       parseInt(form.ctn)       || 0,
     })
-    setForm({ name: '', cat: '', purchase: '', selling: '', stock: '', threshold: '10', ctn: '' })
-    setError('')
-    onClose()
   }
 
   return (
@@ -325,13 +341,15 @@ function AddModal({ isOpen, onClose, onAdd }) {
         </div>
       </div>
       <div style={{ display: 'flex', gap: '9px', marginTop: '6px' }}>
-        <button onClick={handleAdd} style={{ flex: 1, padding: '11px', borderRadius: '9px', border: 'none', background: '#10b981', color: '#fff', fontSize: '13.5px', fontWeight: 700, cursor: 'pointer', transition: 'background .2s' }}
-          onMouseEnter={e => e.currentTarget.style.background = '#059669'}
-          onMouseLeave={e => e.currentTarget.style.background = '#10b981'}
+        <button onClick={handleAdd} disabled={isLoading}
+          style={{ flex: 1, padding: '11px', borderRadius: '9px', border: 'none', background: isLoading ? '#6ee7b7' : '#10b981', color: '#fff', fontSize: '13.5px', fontWeight: 700, cursor: isLoading ? 'not-allowed' : 'pointer', transition: 'background .2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px' }}
+          onMouseEnter={e => { if (!isLoading) e.currentTarget.style.background = '#059669' }}
+          onMouseLeave={e => { if (!isLoading) e.currentTarget.style.background = '#10b981' }}
         >
-          <i className="fa-solid fa-plus" style={{ marginRight: '5px' }} />Add Product
+          <i className={`fa-solid ${isLoading ? 'fa-circle-notch fa-spin' : 'fa-plus'}`} />
+          {isLoading ? 'Adding...' : 'Add Product'}
         </button>
-        <button onClick={onClose} style={{ padding: '11px 18px', borderRadius: '9px', border: '1px solid #e2e8f0', background: '#f5f7fa', color: '#64748b', fontSize: '13.5px', fontWeight: 600, cursor: 'pointer' }}>
+        <button onClick={onClose} disabled={isLoading} style={{ padding: '11px 18px', borderRadius: '9px', border: '1px solid #e2e8f0', background: '#f5f7fa', color: '#64748b', fontSize: '13.5px', fontWeight: 600, cursor: isLoading ? 'not-allowed' : 'pointer' }}>
           Cancel
         </button>
       </div>
@@ -340,7 +358,7 @@ function AddModal({ isOpen, onClose, onAdd }) {
 }
 
 /* ─── EDIT MODAL ─── */
-function EditModal({ isOpen, onClose, product, onSave }) {
+function EditModal({ isOpen, onClose, product, onSave, isLoading }) {
   const [form, setForm] = useState({})
   const [stockQty, setStockQty] = useState('')
   const [curStock, setCurStock] = useState(0)
@@ -362,7 +380,7 @@ function EditModal({ isOpen, onClose, product, onSave }) {
       setCurStock(s => s + qty)
       setForm(f => ({ ...f, stock: f.stock + qty }))
     } else {
-      if (qty > curStock) { alert(`Cannot reduce more than current stock (${curStock})`); return }
+      if (qty > curStock) { toast.error(`Cannot reduce more than current stock (${curStock})`); return }
       setCurStock(s => s - qty)
       setForm(f => ({ ...f, stock: f.stock - qty }))
     }
@@ -370,9 +388,8 @@ function EditModal({ isOpen, onClose, product, onSave }) {
   }
 
   const handleSave = () => {
-    if (!form.name?.trim() || !form.cat) { alert('Name and category required.'); return }
+    if (!form.name?.trim() || !form.cat) { toast.error('Name and category are required.'); return }
     onSave({ ...form, purchase: parseInt(form.purchase) || 0, selling: parseInt(form.selling) || 0, threshold: parseInt(form.threshold) || 10 })
-    onClose()
   }
 
   if (!product) return null
@@ -440,13 +457,15 @@ function EditModal({ isOpen, onClose, product, onSave }) {
       </div>
 
       <div style={{ display: 'flex', gap: '9px', marginTop: '6px' }}>
-        <button onClick={handleSave} style={{ flex: 1, padding: '11px', borderRadius: '9px', border: 'none', background: '#0ea5e9', color: '#fff', fontSize: '13.5px', fontWeight: 700, cursor: 'pointer', transition: 'background .2s' }}
-          onMouseEnter={e => e.currentTarget.style.background = '#0284c7'}
-          onMouseLeave={e => e.currentTarget.style.background = '#0ea5e9'}
+        <button onClick={handleSave} disabled={isLoading}
+          style={{ flex: 1, padding: '11px', borderRadius: '9px', border: 'none', background: isLoading ? '#7dd3fc' : '#0ea5e9', color: '#fff', fontSize: '13.5px', fontWeight: 700, cursor: isLoading ? 'not-allowed' : 'pointer', transition: 'background .2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '7px' }}
+          onMouseEnter={e => { if (!isLoading) e.currentTarget.style.background = '#0284c7' }}
+          onMouseLeave={e => { if (!isLoading) e.currentTarget.style.background = '#0ea5e9' }}
         >
-          <i className="fa-solid fa-check" style={{ marginRight: '5px' }} />Save Changes
+          <i className={`fa-solid ${isLoading ? 'fa-circle-notch fa-spin' : 'fa-check'}`} />
+          {isLoading ? 'Saving...' : 'Save Changes'}
         </button>
-        <button onClick={onClose} style={{ padding: '11px 18px', borderRadius: '9px', border: '1px solid #e2e8f0', background: '#f5f7fa', color: '#64748b', fontSize: '13.5px', fontWeight: 600, cursor: 'pointer' }}>
+        <button onClick={onClose} disabled={isLoading} style={{ padding: '11px 18px', borderRadius: '9px', border: '1px solid #e2e8f0', background: '#f5f7fa', color: '#64748b', fontSize: '13.5px', fontWeight: 600, cursor: isLoading ? 'not-allowed' : 'pointer' }}>
           Cancel
         </button>
       </div>
@@ -456,11 +475,6 @@ function EditModal({ isOpen, onClose, product, onSave }) {
 
 /* ─── MAIN COMPONENT ─── */
 export default function ProductManagement() {
-  const { data: products = [], isLoading, isError, refetch } = useGetProductsQuery()
-  const [createProduct] = useCreateProductMutation()
-  const [updateProduct] = useUpdateProductMutation()
-  const [deleteProduct] = useDeleteProductMutation()
-
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState('all')
   const [view, setView] = useState('grid')
@@ -468,51 +482,50 @@ export default function ProductManagement() {
   const [showAdd, setShowAdd] = useState(false)
   const [editProduct, setEditProduct] = useState(null)
 
-  const counts = useMemo(() => ({
-    total:   products.length,
-    instock: products.filter(p => getStatus(p) === 'in-stock').length,
-    low:     products.filter(p => getStatus(p) === 'low').length,
-    out:     products.filter(p => getStatus(p) === 'out').length,
-  }), [products])
+  // Filtered + sorted list — backend does the work
+  const { data: filtered = [], isLoading, isError, refetch } = useGetProductsQuery({ search, filter, sort })
+  // Unfiltered counts for the tab badges
+  const { data: allProducts = [] } = useGetProductsQuery({})
 
-  const filtered = useMemo(() => {
-    let list = products.filter(p => {
-      const matchFilter = filter === 'all' || getStatus(p) === filter
-      const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) || p.cat.toLowerCase().includes(search.toLowerCase())
-      return matchFilter && matchSearch
-    })
-    if (sort === 'name')    list = [...list].sort((a, b) => a.name.localeCompare(b.name))
-    if (sort === 'price-h') list = [...list].sort((a, b) => b.selling - a.selling)
-    if (sort === 'price-l') list = [...list].sort((a, b) => a.selling - b.selling)
-    if (sort === 'stock-l') list = [...list].sort((a, b) => a.stock - b.stock)
-    return list
-  }, [products, search, filter, sort])
+  const [createProduct, { isLoading: isCreating }] = useCreateProductMutation()
+  const [updateProduct, { isLoading: isUpdating }] = useUpdateProductMutation()
+  const [deleteProduct] = useDeleteProductMutation()
+
+  const counts = {
+    total:   allProducts.length,
+    instock: allProducts.filter(p => getStatus(p) === 'in-stock').length,
+    low:     allProducts.filter(p => getStatus(p) === 'low').length,
+    out:     allProducts.filter(p => getStatus(p) === 'out').length,
+  }
 
   const handleAdd = async (data) => {
     try {
       await createProduct(data).unwrap()
-    } catch (err) {
-      console.error('Failed to create product:', err)
-      alert('Product add karne mein masla hua.')
+      toast.success('Product added successfully!')
+      setShowAdd(false)
+    } catch {
+      toast.error('Failed to add product. Please try again.')
     }
   }
 
   const handleSave = async (updated) => {
     try {
       await updateProduct({ id: updated.id, ...updated }).unwrap()
-    } catch (err) {
-      console.error('Failed to update product:', err)
-      alert('Product update karne mein masla hua.')
+      toast.success('Product updated successfully!')
+      setEditProduct(null)
+    } catch {
+      toast.error('Failed to update product. Please try again.')
     }
   }
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Delete this product? This cannot be undone.')) return
+    const ok = await confirmToast('Delete this product? This cannot be undone.')
+    if (!ok) return
     try {
       await deleteProduct(id).unwrap()
-    } catch (err) {
-      console.error('Failed to delete product:', err)
-      alert('Product delete karne mein masla hua.')
+      toast.success('Product deleted.')
+    } catch {
+      toast.error('Failed to delete product. Please try again.')
     }
   }
 
@@ -656,8 +669,8 @@ export default function ProductManagement() {
         WholesalePro Management System © 2026
       </div>
 
-      <AddModal isOpen={showAdd} onClose={() => setShowAdd(false)} onAdd={handleAdd} />
-      <EditModal isOpen={!!editProduct} onClose={() => setEditProduct(null)} product={editProduct} onSave={handleSave} />
+      <AddModal isOpen={showAdd} onClose={() => setShowAdd(false)} onAdd={handleAdd} isLoading={isCreating} />
+      <EditModal isOpen={!!editProduct} onClose={() => setEditProduct(null)} product={editProduct} onSave={handleSave} isLoading={isUpdating} />
 
       <style>{`
         @media(max-width:1100px){ .pm-stats{ grid-template-columns: repeat(2,1fr) !important; } }

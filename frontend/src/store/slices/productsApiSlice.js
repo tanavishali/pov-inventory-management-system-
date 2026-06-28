@@ -4,7 +4,14 @@ export const productsApiSlice = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
     // GET /products - list all products for current shop
     getProducts: builder.query({
-      query: () => '/products',
+      query: ({ search, filter, sort } = {}) => {
+        const sp = new URLSearchParams()
+        if (search) sp.set('search', search)
+        if (filter && filter !== 'all') sp.set('filter', filter)
+        if (sort) sp.set('sort', sort)
+        const qs = sp.toString()
+        return qs ? `/products?${qs}` : '/products'
+      },
       providesTags: ['Product'],
     }),
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import { INITIAL_PRODUCTS } from '../dashboard/ProductManagement'
+import GlobalLoader from '../../components/ui/GlobalLoader'
 
 export default function SalesmanLayout({ user, onLogout }) {
   const navigate = useNavigate()
@@ -57,6 +58,7 @@ export default function SalesmanLayout({ user, onLogout }) {
 
   return (
     <div style={{ background: '#f0f4f8', minHeight: '100vh', fontFamily: "'Plus Jakarta Sans',sans-serif", overflowX: 'hidden' }}>
+      <GlobalLoader />
 
       {isMobile && sidebarOpen && (
         <div onClick={() => setSidebarOpen(false)} style={{

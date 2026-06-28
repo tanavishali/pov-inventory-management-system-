@@ -12,11 +12,16 @@ export class SalesmanService {
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>
   ) {}
 
-  async findAll(shopId: string): Promise<UserDocument[]> {
-    return this.userModel
-      .find({ shopId: new Types.ObjectId(shopId), role: 'salesman' })
-      .sort({ createdAt: -1 })
-      .exec();
+  async findAll(shopId: string, search?: string, status?: string): Promise<UserDocument[]> {
+    const query: any = { shopId: new Types.ObjectId(shopId), role: 'salesman' };
+    if (status && status !== 'all') {
+      query.status = status === 'active' ? { $in: ['Active', 'active'] } : { $in: ['Locked', 'blocked'] };
+    }
+    if (search) {
+      const re = new RegExp(search, 'i');
+      query.$or = [{ name: re }, { email: re }, { phone: re }];
+    }
+    return this.userModel.find(query).sort({ createdAt: -1 }).exec();
   }
 
   async create(shopId: string, dto: CreateSalesmanDto): Promise<UserDocument> {
@@ -32,6 +37,7 @@ export class SalesmanService {
       ...dto,
       email: dto.email.toLowerCase(),
       password: hashedPassword,
+      plainPassword: dto.password,
       role: 'salesman',
       shopId: new Types.ObjectId(shopId),
       // Default initial sales/orders to 0 if not provided
@@ -74,6 +80,7 @@ export class SalesmanService {
     // Hash password if modified
     if (dto.password) {
       salesman.password = await bcrypt.hash(dto.password, 10);
+      salesman.plainPassword = dto.password;
     }
 
     // Apply other updateable properties

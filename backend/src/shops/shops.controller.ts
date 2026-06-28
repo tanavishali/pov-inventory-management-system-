@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, Req, Query, ParseIntPipe } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { ShopsService } from './shops.service';
 import { UsersService } from '../users/users.service';
@@ -24,9 +24,9 @@ export class ShopsController {
 
   @Get()
   @ApiOperation({ summary: 'Get all customer retail shops for the current tenant' })
-  async findAll(@Req() req: any) {
+  async findAll(@Req() req: any, @Query('search') search?: string, @Query('status') status?: string) {
     const shopId = await this.getShopId(req);
-    return this.shopsService.findAll(shopId);
+    return this.shopsService.findAll(shopId, search, status);
   }
 
   @Post()

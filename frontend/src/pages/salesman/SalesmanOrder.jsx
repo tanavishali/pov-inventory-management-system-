@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useOutletContext, useNavigate } from 'react-router-dom'
+import { toast } from 'react-toastify'
 import { useGetShopsQuery } from '../../store/slices/shopsApiSlice'
 import { useGetProductsQuery } from '../../store/slices/productsApiSlice'
 import { useCreateOrderMutation } from '../../store/slices/ordersApiSlice'
@@ -213,7 +214,7 @@ export default function SalesmanOrder() {
       setSubmitted(true)
     } catch (err) {
       console.error('Failed to submit order to database:', err)
-      alert(err?.data?.message || 'Failed to submit order. Please check product stock or connection.')
+      toast.error(err?.data?.message || 'Failed to submit order. Please check product stock or connection.')
     }
   }
 

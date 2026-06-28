@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom'
+import GlobalLoader from '../../components/ui/GlobalLoader'
 
 export default function SALayout({ user, onLogout }) {
   const navigate = useNavigate()
@@ -41,6 +42,7 @@ export default function SALayout({ user, onLogout }) {
 
   return (
     <div style={{ background: '#f0f6ff', minHeight: '100vh', fontFamily: "'Plus Jakarta Sans',sans-serif", overflowX: 'hidden' }}>
+      <GlobalLoader />
 
       {/* Mobile Backdrop */}
       {isMobile && sidebarOpen && (

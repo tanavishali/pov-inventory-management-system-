@@ -2,12 +2,18 @@ import { useState, useEffect } from 'react'
 import { Outlet, useNavigate, useLocation, Navigate } from 'react-router-dom'
 import Sidebar from '../components/dashboard/Sidebar'
 import Topbar from '../components/dashboard/Topbar'
+import GlobalLoader from '../components/ui/GlobalLoader'
 import { useGetBusinessSettingsQuery } from '../store/slices/authApiSlice'
 import { INITIAL_PRODUCTS } from './dashboard/ProductManagement'
 import { INITIAL_ORDERS } from './dashboard/OrderManagement'
 import { useGetOrdersQuery } from '../store/slices/ordersApiSlice'
 import { io } from 'socket.io-client'
 import { useGetProductsQuery } from '../store/slices/productsApiSlice'
+
+// Stable empty arrays used as RTK Query defaults — prevents new [] reference each render
+// which would cause useEffect([dbOrders]) / useEffect([dbProducts]) to fire every render
+const EMPTY_ORDERS = []
+const EMPTY_PRODUCTS = []
 
 const routeToNav = {
   '/dashboard': 'Dashboard',
@@ -55,8 +61,8 @@ export default function DashboardLayout({ user, onLogout }) {
     })
   }
 
-  const { data: dbOrders = [] } = useGetOrdersQuery()
-  const { data: dbProducts = [] } = useGetProductsQuery()
+  const { data: dbOrders = EMPTY_ORDERS } = useGetOrdersQuery()
+  const { data: dbProducts = EMPTY_PRODUCTS } = useGetProductsQuery({})
   const [sharedOrders, setSharedOrders] = useState([])
 
   useEffect(() => {
@@ -150,10 +156,6 @@ export default function DashboardLayout({ user, onLogout }) {
     }
   }, [dbProducts])
 
-  if (!user) return <Navigate to="/auth" replace />
-
-  const activeNav = routeToNav[location.pathname] || 'Dashboard'
-
   useEffect(() => {
     const handleResize = () => {
       const mobile = window.innerWidth <= 768
@@ -165,6 +167,10 @@ export default function DashboardLayout({ user, onLogout }) {
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
+  if (!user) return <Navigate to="/auth" replace />
+
+  const activeNav = routeToNav[location.pathname] || 'Dashboard'
+
   const handleNavClick = (label, path) => {
     navigate(path)
     if (isMobile) setSidebarOpen(false)
@@ -172,6 +178,7 @@ export default function DashboardLayout({ user, onLogout }) {
 
   return (
     <div style={{ background: '#f0f4f8', minHeight: '100vh', overflowX: 'hidden' }}>
+      <GlobalLoader />
       {isMobile && sidebarOpen && (
         <div onClick={() => setSidebarOpen(false)} style={{
           position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.3)',

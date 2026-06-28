@@ -20,9 +20,15 @@ export class ShopsService {
     @InjectModel(Shop.name) private shopModel: Model<ShopDocument>,
   ) {}
 
-  async findAll(shopId: Types.ObjectId | string): Promise<ShopDocument[]> {
+  async findAll(shopId: Types.ObjectId | string, search?: string, status?: string): Promise<ShopDocument[]> {
     const sId = typeof shopId === 'string' ? new Types.ObjectId(shopId) : shopId;
-    return this.shopModel.find({ shopId: sId }).sort({ id: 1 }).exec();
+    const query: any = { shopId: sId };
+    if (status && status !== 'all') query.status = status;
+    if (search) {
+      const re = new RegExp(search, 'i');
+      query.$or = [{ name: re }, { owner: re }, { city: re }, { phone: re }];
+    }
+    return this.shopModel.find(query).sort({ id: 1 }).exec();
   }
 
   async create(shopId: Types.ObjectId | string, createShopDto: CreateShopDto): Promise<ShopDocument> {

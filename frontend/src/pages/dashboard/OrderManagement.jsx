@@ -1,5 +1,7 @@
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useOutletContext } from 'react-router-dom'
+import { toast } from 'react-toastify'
+import { confirmToast } from '../../utils/confirmToast'
 import { INITIAL_PRODUCTS } from './ProductManagement'
 import { useGetProductsQuery } from '../../store/slices/productsApiSlice'
 import { useGetShopsQuery } from '../../store/slices/shopsApiSlice'
@@ -148,7 +150,7 @@ function OrderCard({ order, onView, onPrint, onChangeStatus, onDelete, onEdit })
           {[
             { icon: 'user',          label: 'Customer', val: order.customer },
             { icon: 'store',         label: 'Shop',     val: order.shop },
-            { icon: 'user-tie',      label: 'Salesman', val: order.salesman },
+            { icon: 'user-tie',      label: 'Salesman', val: order.salesman?.trim() || 'Admin' },
             { icon: 'boxes-stacked', label: 'Products', val: `${order.products.length} item${order.products.length !== 1 ? 's' : ''}` },
           ].map(({ icon, label, val }) => (
             <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
@@ -237,7 +239,7 @@ function ViewModal({ order, onClose, onPrint }) {
         {[
           { icon: 'user',         label: 'Customer', val: order.customer },
           { icon: 'store',        label: 'Shop',     val: order.shop },
-          { icon: 'user-tie',     label: 'Salesman', val: order.salesman },
+          { icon: 'user-tie',     label: 'Salesman', val: order.salesman?.trim() || 'Admin' },
           { icon: 'circle-info',  label: 'Status',   val: <StatusBadge status={order.status} size="lg" /> },
           { icon: 'money-bill',   label: 'Payment',  val: <PayBadge payment={order.payment} /> },
           { icon: 'calendar',     label: 'Date & Time', val: `${order.date} · ${order.time}` },
@@ -385,8 +387,17 @@ function NewOrderModal({ isOpen, onClose, onPlace, products = [], shops = [] }) 
     onClose()
   }
 
+  const handlePhoneChange = (e) => {
+    const digits = e.target.value.replace(/\D/g, '').slice(0, 11)
+    setPhone(digits)
+  }
+
   const handlePlace = () => {
     if (!customer.trim() || !shop.trim()) { setError('Customer aur shop name zaroori hain.'); return }
+    if (phone.trim() && (phone.replace(/\D/g, '').length !== 11 || !phone.replace(/\D/g, '').startsWith('0'))) {
+      setError('Phone number 11 digits ka hona chahiye (e.g. 03067251356).')
+      return
+    }
     const prods = rows.filter(r => r.name.trim() && r.qty > 0).map(r => ({ name: r.name.trim(), qty: parseInt(r.qty) || 1, price: parseInt(r.price) || 0, ctn: parseInt(r.ctn) || 0 }))
     if (!prods.length) { setError('Kam se kam ek product add karo.'); return }
     onPlace({ customer: customer.trim(), shop: shop.trim(), phone: phone.trim(), salesman: salesman.trim(), payment, advance: advanceAmt, products: prods })
@@ -469,7 +480,7 @@ function NewOrderModal({ isOpen, onClose, onPlace, products = [], shops = [] }) 
           <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '5px', display: 'block' }}>
             <i className="fa-solid fa-phone" style={{ marginRight: '4px' }} />Customer Phone
           </label>
-          <input style={inputStyle} type="text" placeholder="+92-300-1234567" value={phone} onChange={e => setPhone(e.target.value)}
+          <input style={inputStyle} type="text" placeholder="03067251356" inputMode="numeric" maxLength={11} value={phone} onChange={handlePhoneChange}
             onFocus={e => { e.target.style.borderColor = '#0ea5e9'; e.target.style.background = '#fff'; e.target.style.boxShadow = '0 0 0 3px rgba(14,165,233,.1)' }}
             onBlur={e => { e.target.style.borderColor = '#e2e8f0'; e.target.style.background = '#f5f7fa'; e.target.style.boxShadow = 'none' }}
           />
@@ -654,21 +665,19 @@ function EditOrderModal({ isOpen, order, onClose, onSave, products = [] }) {
   const [error, setError] = useState('')
   const [suggestions, setSuggestions] = useState({ id: null, list: [] })
   const nextId = useRef(100)
-  const prevOrderId = useRef(null)
 
-  // Sync form when order changes - always pre-fill from order data
-  if (order && order.id !== prevOrderId.current) {
-    prevOrderId.current = order.id
+  useEffect(() => {
+    if (!order) return
     setCustomer(order.customer || '')
     setShop(order.shop || '')
     setSalesman(order.salesman || '')
     setPayment(order.payment || 'Paid')
     setAdvance(order.advance ? String(order.advance) : '')
     setStatus(order.status || 'pending')
-    setRows(order.products.map((p, i) => ({ id: i + 1, name: p.name, qty: p.qty, price: p.price, ctn: p.ctn || '' })))
-    nextId.current = order.products.length + 1
+    setRows((order.products || []).map((p, i) => ({ id: i + 1, name: p.name, qty: p.qty, price: p.price, ctn: p.ctn || '' })))
+    nextId.current = (order.products?.length || 0) + 1
     setError('')
-  }
+  }, [order?.id])
 
   const addRow = () => setRows(r => [...r, { id: nextId.current++, name: '', qty: 1, price: 0, ctn: '' }])
   const removeRow = id => { setRows(r => r.filter(x => x.id !== id)); setSuggestions({ id: null, list: [] }) }
@@ -691,15 +700,13 @@ function EditOrderModal({ isOpen, order, onClose, onSave, products = [] }) {
   const remaining = total - advanceAmt
 
   const handleSave = () => {
-    if (!customer.trim() || !shop.trim() || !salesman.trim()) { setError('Customer, shop aur salesman name zaroori hain.'); return }
     const prods = rows.filter(r => r.name.trim() && r.qty > 0).map(r => ({ name: r.name.trim(), qty: parseInt(r.qty) || 1, price: parseInt(r.price) || 0, ctn: parseInt(r.ctn) || 0 }))
     if (!prods.length) { setError('Kam se kam ek product add karo.'); return }
     onSave({ ...order, customer: customer.trim(), shop: shop.trim(), salesman: salesman.trim(), payment, advance: advanceAmt, status, products: prods })
-    prevOrderId.current = null
     onClose()
   }
 
-  const handleClose = () => { prevOrderId.current = null; setSuggestions({ id: null, list: [] }); onClose() }
+  const handleClose = () => { setSuggestions({ id: null, list: [] }); onClose() }
 
   if (!isOpen || !order) return null
   return (
@@ -721,19 +728,36 @@ function EditOrderModal({ isOpen, order, onClose, onSave, products = [] }) {
 
       {/* Info Fields */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }} className="eo-half">
-        {[
-          { label: 'Customer Name', placeholder: 'e.g. Ali Hassan',    val: customer,  set: setCustomer },
-          { label: 'Shop Name',     placeholder: 'e.g. Al-Noor Store', val: shop,      set: setShop },
-          { label: 'Salesman Name', placeholder: 'e.g. Usman Farooq',  val: salesman,  set: setSalesman },
-        ].map(({ label, placeholder, val, set }) => (
-          <div key={label}>
-            <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '5px', display: 'block' }}>{label}</label>
-            <input style={inputStyle} type="text" placeholder={placeholder} value={val} onChange={e => set(e.target.value)}
-              onFocus={e => { e.target.style.borderColor = '#6366f1'; e.target.style.background = '#fff'; e.target.style.boxShadow = '0 0 0 3px rgba(99,102,241,.1)' }}
-              onBlur={e => { e.target.style.borderColor = '#e2e8f0'; e.target.style.background = '#f5f7fa'; e.target.style.boxShadow = 'none' }}
-            />
+        {/* Read-only: Customer Name */}
+        <div>
+          <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '5px', display: 'block' }}>
+            Customer Name <span style={{ fontSize: '9px', color: '#cbd5e1', fontWeight: 500, marginLeft: '4px' }}>• not editable</span>
+          </label>
+          <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', gap: '7px', color: '#64748b', cursor: 'not-allowed', background: '#f0f4f8', border: '1px dashed #cbd5e1' }}>
+            <i className="fa-solid fa-lock" style={{ fontSize: '10px', color: '#cbd5e1' }} />
+            {customer || '—'}
           </div>
-        ))}
+        </div>
+        {/* Read-only: Shop Name */}
+        <div>
+          <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '5px', display: 'block' }}>
+            Shop Name <span style={{ fontSize: '9px', color: '#cbd5e1', fontWeight: 500, marginLeft: '4px' }}>• not editable</span>
+          </label>
+          <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', gap: '7px', color: '#64748b', cursor: 'not-allowed', background: '#f0f4f8', border: '1px dashed #cbd5e1' }}>
+            <i className="fa-solid fa-lock" style={{ fontSize: '10px', color: '#cbd5e1' }} />
+            {shop || '—'}
+          </div>
+        </div>
+        {/* Read-only: Salesman Name */}
+        <div>
+          <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '5px', display: 'block' }}>
+            Salesman Name <span style={{ fontSize: '9px', color: '#cbd5e1', fontWeight: 500, marginLeft: '4px' }}>• not editable</span>
+          </label>
+          <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', gap: '7px', color: '#64748b', cursor: 'not-allowed', background: '#f0f4f8', border: '1px dashed #cbd5e1' }}>
+            <i className="fa-solid fa-lock" style={{ fontSize: '10px', color: '#cbd5e1' }} />
+            {salesman?.trim() || 'Admin'}
+          </div>
+        </div>
         <div>
           <label style={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '.5px', marginBottom: '5px', display: 'block' }}>Status</label>
           <select style={inputStyle} value={status} onChange={e => setStatus(e.target.value)}>
@@ -1108,8 +1132,8 @@ export default function OrderManagement() {
   const setOrders = ctx.setSharedOrders ?? (() => {})
   const isMobile = ctx.isMobile ?? false
 
-  const { data: products = [] } = useGetProductsQuery()
-  const { data: shops = [] } = useGetShopsQuery()
+  const { data: products = [] } = useGetProductsQuery({})
+  const { data: shops = [] } = useGetShopsQuery({})
   const [createOrder] = useCreateOrderMutation()
   const [updateOrder] = useUpdateOrderMutation()
   const [deleteOrder] = useDeleteOrderMutation()
@@ -1161,13 +1185,14 @@ export default function OrderManagement() {
     if (updated._fromSalesman) {
       updateSalesmanOrder(updated.id, updated)
       if (viewOrder?.id === updated.id) setViewOrder(updated)
+      toast.success('Order updated.')
     } else {
       try {
         await updateOrder({ id: updated.id, ...updated }).unwrap()
         if (viewOrder?.id === updated.id) setViewOrder(updated)
+        toast.success('Order updated.')
       } catch (err) {
-        console.error('Failed to update order:', err)
-        alert(err?.data?.message || 'Order update karne mein error aaya.')
+        toast.error(err?.data?.message || 'Order update karne mein error aaya.')
       }
     }
   }
@@ -1175,18 +1200,20 @@ export default function OrderManagement() {
   const handleChangeStatus = async (id, newStatus) => {
     const o = orders.find(x => x.id === id)
     if (!o) return
-    if (!window.confirm(`Change order ${o.id} to "${STATUS_LABELS[newStatus]}"?`)) return
-    
+    const ok = await confirmToast(`Order ${o.id} ko "${STATUS_LABELS[newStatus]}" karna chahte hain?`, { confirmLabel: 'Yes, Change', confirmColor: '#0ea5e9' })
+    if (!ok) return
+
     if (o._fromSalesman) {
       updateSalesmanOrder(id, { status: newStatus })
       if (viewOrder?.id === id) setViewOrder(prev => ({ ...prev, status: newStatus }))
+      toast.success(`Status updated to ${STATUS_LABELS[newStatus]}.`)
     } else {
       try {
         await updateOrder({ id, status: newStatus }).unwrap()
         if (viewOrder?.id === id) setViewOrder(prev => ({ ...prev, status: newStatus }))
+        toast.success(`Status updated to ${STATUS_LABELS[newStatus]}.`)
       } catch (err) {
-        console.error('Failed to update status:', err)
-        alert(err?.data?.message || 'Status change karne mein error aaya.')
+        toast.error(err?.data?.message || 'Status change karne mein error aaya.')
       }
     }
   }
@@ -1194,18 +1221,20 @@ export default function OrderManagement() {
   const handleDelete = async (id) => {
     const o = orders.find(x => x.id === id)
     if (!o) return
-    if (!window.confirm(`Order ${o.id} permanently delete karna chahte hain? Yeh wapas nahi aayega.`)) return
-    
+    const ok = await confirmToast(`Order ${o.id} permanently delete karna chahte hain? Yeh wapas nahi aayega.`)
+    if (!ok) return
+
     if (o._fromSalesman) {
       deleteSalesmanOrder(id)
       if (viewOrder?.id === id) setViewOrder(null)
+      toast.success('Order deleted.')
     } else {
       try {
         await deleteOrder(id).unwrap()
         if (viewOrder?.id === id) setViewOrder(null)
+        toast.success('Order deleted.')
       } catch (err) {
-        console.error('Failed to delete order:', err)
-        alert(err?.data?.message || 'Order delete karne mein error aaya.')
+        toast.error(err?.data?.message || 'Order delete karne mein error aaya.')
       }
     }
   }
@@ -1213,9 +1242,9 @@ export default function OrderManagement() {
   const handlePlaceOrder = async (data) => {
     try {
       await createOrder(data).unwrap()
+      toast.success('Order placed successfully!')
     } catch (err) {
-      console.error('Failed to place order:', err)
-      alert(err?.data?.message || 'Order place karne mein error aaya.')
+      toast.error(err?.data?.message || 'Order place karne mein error aaya.')
     }
   }
 
@@ -1334,6 +1363,7 @@ export default function OrderManagement() {
     .footer{padding:12px 18px}
   }
 </style>
+<script>window.addEventListener('load',function(){if(window.screen.width>768){window.print();}});</script>
 </head>
 <body>
 <div class="page">
@@ -1430,17 +1460,10 @@ export default function OrderManagement() {
 
   const handlePrint = (order) => {
     const html = buildInvoiceHTML(order)
-    const iframe = document.createElement('iframe')
-    iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;'
-    document.body.appendChild(iframe)
-    iframe.contentDocument.open()
-    iframe.contentDocument.write(html)
-    iframe.contentDocument.close()
-    iframe.contentWindow.focus()
-    setTimeout(() => {
-      iframe.contentWindow.print()
-      setTimeout(() => document.body.removeChild(iframe), 1000)
-    }, 300)
+    const blob = new Blob([html], { type: 'text/html' })
+    const url  = URL.createObjectURL(blob)
+    window.open(url, '_blank')
+    setTimeout(() => URL.revokeObjectURL(url), 10000)
   }
 
   const tabs = [

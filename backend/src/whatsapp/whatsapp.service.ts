@@ -46,12 +46,15 @@ function parseOrderDate(dateStr: string, timeStr?: string): Date {
 
 @Injectable()
 export class WhatsappService extends EventEmitter implements OnModuleInit, OnModuleDestroy {
-  // Map of active WhatsApp sockets per shopId
-  private activeSockets = new Map<string, any>();
-  // Map of connection status per shopId
-  private connectionStatuses = new Map<string, 'disconnected' | 'connecting' | 'connected'>();
-  // Track JID (connected phone number) per shopId
-  private connectedJids = new Map<string, string>();
+  private activeSockets        = new Map<string, any>();
+  private connectionStatuses   = new Map<string, 'disconnected' | 'connecting' | 'connected'>();
+  private connectedJids        = new Map<string, string>();
+  // Prevents two concurrent connect() calls for the same shop (race condition guard)
+  private pendingConnects      = new Set<string>();
+  // Sends welcome message only on first successful connect, not on every auto-reconnect
+  private welcomeSentShops     = new Set<string>();
+  // Tracks pending auto-reconnect timers so they can be cancelled on manual disconnect
+  private reconnectTimers      = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor(
     @InjectModel(User.name) private userModel: Model<UserDocument>,
@@ -123,7 +126,7 @@ export class WhatsappService extends EventEmitter implements OnModuleInit, OnMod
    * Initialize a Baileys session for a shop
    */
   async connect(shopId: string) {
-    // Prevent double instantiation
+    // Guard 1: already connected/connecting via active socket
     if (this.activeSockets.has(shopId)) {
       const status = this.connectionStatuses.get(shopId);
       if (status === 'connected' || status === 'connecting') {
@@ -131,6 +134,16 @@ export class WhatsappService extends EventEmitter implements OnModuleInit, OnMod
         return;
       }
     }
+    // Guard 2: another connect() call is already mid-flight for this shop (race condition)
+    if (this.pendingConnects.has(shopId)) {
+      console.log(`WhatsApp connect() already in progress for shop ${shopId}. Skipping.`);
+      return;
+    }
+    this.pendingConnects.add(shopId);
+
+    // Cancel any pending auto-reconnect timer (e.g. user clicked "Connect" manually)
+    const existing = this.reconnectTimers.get(shopId);
+    if (existing) { clearTimeout(existing); this.reconnectTimers.delete(shopId); }
 
     this.connectionStatuses.set(shopId, 'connecting');
     this.emit('status', { shopId, status: 'connecting' });
@@ -149,6 +162,7 @@ export class WhatsappService extends EventEmitter implements OnModuleInit, OnMod
       });
 
       this.activeSockets.set(shopId, sock);
+      this.pendingConnects.delete(shopId); // socket created — release the race-condition lock
 
       // Listen for credential saving
       sock.ev.on('creds.update', saveCreds);
@@ -175,9 +189,11 @@ export class WhatsappService extends EventEmitter implements OnModuleInit, OnMod
           this.connectionStatuses.set(shopId, 'disconnected');
           this.connectedJids.delete(shopId);
           this.activeSockets.delete(shopId);
+          this.emit('status', { shopId, status: 'disconnected' });
 
           if (!shouldReconnect) {
-            // Delete session credentials completely
+            // Logged out — delete session credentials and clear welcome-sent flag
+            this.welcomeSentShops.delete(shopId);
             try {
               if (existsSync(sessionDir)) {
                 rmSync(sessionDir, { recursive: true, force: true });
@@ -186,11 +202,13 @@ export class WhatsappService extends EventEmitter implements OnModuleInit, OnMod
             } catch (err) {
               console.error(`Failed to delete session directory for shop ${shopId}:`, err);
             }
-            this.emit('status', { shopId, status: 'disconnected' });
           } else {
-            // Reconnect
-            this.emit('status', { shopId, status: 'disconnected' });
-            setTimeout(() => this.connect(shopId), 3000);
+            // Temporary drop — schedule silent reconnect (no welcome message)
+            const timer = setTimeout(() => {
+              this.reconnectTimers.delete(shopId);
+              this.connect(shopId);
+            }, 3000);
+            this.reconnectTimers.set(shopId, timer);
           }
         } else if (connection === 'open') {
           console.log(`WhatsApp connection established successfully for shop ${shopId}`);
@@ -203,13 +221,16 @@ export class WhatsappService extends EventEmitter implements OnModuleInit, OnMod
 
             this.emit('status', { shopId, status: 'connected', phone: botId.split(':')[0] });
 
-            // Automatically send activation/welcome message to the connected number
-            try {
-              await sock.sendMessage(jid, {
-                text: `🤖 *SMART SALES POS BOT ACTIVATED*\n\nHello Admin!\n\nYour WhatsApp Bot has been successfully linked to your POS system! 🎉\n\nYou can now query live reporting metrics directly from this chat on the go.\n\nType */help* to see all available commands! 🚀`
-              });
-            } catch (err) {
-              console.error(`Failed to send welcome message for shop ${shopId}:`, err);
+            // Send welcome message only on first connection, not every reconnect
+            if (!this.welcomeSentShops.has(shopId)) {
+              this.welcomeSentShops.add(shopId);
+              try {
+                await sock.sendMessage(jid, {
+                  text: `🤖 *SMART SALES POS BOT ACTIVATED*\n\nHello Admin!\n\nYour WhatsApp Bot has been successfully linked to your POS system! 🎉\n\nYou can now query live reporting metrics directly from this chat on the go.\n\nType */help* to see all available commands! 🚀`
+                });
+              } catch (err) {
+                console.error(`Failed to send welcome message for shop ${shopId}:`, err);
+              }
             }
           }
         }
@@ -219,10 +240,24 @@ export class WhatsappService extends EventEmitter implements OnModuleInit, OnMod
       sock.ev.on('messages.upsert', async (upsert) => {
         console.log(`[WA UPSERT] Shop ${shopId} | Type: "${upsert.type}" | Messages count: ${upsert.messages?.length}`);
 
+        // "append" = history loaded on connect; "notify" = genuinely new message
+        if (upsert.type !== 'notify') return;
+
+        // Reject messages older than 30 seconds — these are missed/queued messages
+        // delivered in bulk on reconnect, not real-time commands the user just typed
+        const nowSec = Math.floor(Date.now() / 1000);
+
         for (const message of upsert.messages) {
           try {
             // RAW dump EVERY message for diagnosis - always log before any filter
             console.log(`[WA RAW MSG] Key:`, JSON.stringify(message.key), `| StubType: ${message.messageStubType} | HasMsg: ${!!message.message} | MsgKeys: ${message.message ? Object.keys(message.message) : 'N/A'}`);
+
+            // Skip stale messages (sent while bot was offline / history replay)
+            const msgTimestamp = Number(message.messageTimestamp ?? 0);
+            if (msgTimestamp && nowSec - msgTimestamp > 30) {
+              console.log(`[WA SKIP] Stale message (age ${nowSec - msgTimestamp}s), ignoring`);
+              continue;
+            }
 
             // Skip messages with no content at all (status broadcasts, receipts)
             if (!message.message) {
@@ -245,25 +280,6 @@ export class WhatsappService extends EventEmitter implements OnModuleInit, OnMod
             await this.handleIncomingMessage(shopId, sock, message);
           } catch (err) {
             console.error(`Error handling message for shop ${shopId}:`, err);
-          }
-        }
-      });
-
-      // Also listen for history sync - messages from primary phone sometimes arrive here
-      sock.ev.on('messaging-history.set', ({ messages: histMsgs }) => {
-        console.log(`[WA HISTORY SYNC] Shop ${shopId} | Received ${histMsgs?.length || 0} history messages`);
-        if (histMsgs && histMsgs.length > 0) {
-          for (const message of histMsgs) {
-            try {
-              if (!message.message) continue;
-              const text = this.getMessageText(message);
-              if (text.trim().startsWith('/')) {
-                console.log(`[WA HISTORY CMD] Found command in history: "${text.trim()}" - processing`);
-                this.handleIncomingMessage(shopId, sock, message);
-              }
-            } catch (err) {
-              console.error(`Error processing history message:`, err);
-            }
           }
         }
       });
@@ -294,6 +310,12 @@ export class WhatsappService extends EventEmitter implements OnModuleInit, OnMod
         console.error(`Failed to cleanly log out of WhatsApp socket for shop ${shopId}:`, err);
       }
     }
+
+    // Cancel any pending auto-reconnect and clear welcome-sent state
+    const timer = this.reconnectTimers.get(shopId);
+    if (timer) { clearTimeout(timer); this.reconnectTimers.delete(shopId); }
+    this.welcomeSentShops.delete(shopId);
+    this.pendingConnects.delete(shopId);
 
     this.activeSockets.delete(shopId);
     this.connectionStatuses.set(shopId, 'disconnected');

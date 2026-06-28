@@ -386,10 +386,16 @@ export default function UdharManagement() {
   const ctx = useOutletContext() || {}
   const sharedOrders = ctx.sharedOrders ?? []
 
+  const [search, setSearch] = useState('')
+  const [filter, setFilter] = useState('pending')
+
   /* ── RTK Query ── */
-  const { data: dbShops = [], isLoading: isLoadingShops } = useGetShopsQuery()
+  // search-filtered shops (backend handles text search)
+  const { data: dbShops = [], isLoading: isLoadingShops } = useGetShopsQuery({ search })
+  // all shops for summary totals (unaffected by search)
+  const { data: allDbShops = [] } = useGetShopsQuery({})
   const { data: dbLedger = [], isLoading: isLoadingLedger } = useGetUdharQuery()
-  const { data: dbProducts = [], isLoading: isLoadingProducts } = useGetProductsQuery()
+  const { data: dbProducts = [], isLoading: isLoadingProducts } = useGetProductsQuery({})
 
   const [createShop] = useCreateShopMutation()
   const [updateShop] = useUpdateShopMutation()
@@ -400,16 +406,12 @@ export default function UdharManagement() {
   const [deleteUdhar] = useDeleteUdharMutation()
 
   /* ── Derived Mapped State ── */
-  const shops = useMemo(() => {
-    return dbShops.map(s => ({
-      id: s.id,
-      _id: s._id,
-      shopName: s.name,
-      ownerName: s.owner,
-      phone: s.phone,
-      status: s.status,
-    }))
-  }, [dbShops])
+  const mapShop = s => ({ id: s.id, _id: s._id, shopName: s.name, ownerName: s.owner, phone: s.phone, status: s.status })
+
+  // search-filtered shops (for the list)
+  const shops = useMemo(() => dbShops.map(mapShop), [dbShops])
+  // all shops (for summary totals — not affected by search filter)
+  const allShops = useMemo(() => allDbShops.map(mapShop), [allDbShops])
 
   const productsList = useMemo(() => {
     return dbProducts.map(p => ({
@@ -478,9 +480,6 @@ export default function UdharManagement() {
   const [view,   setView]   = useState('list') // 'list' | 'detail'
   const [selId,  setSelId]  = useState(null)   // selected shop id
 
-  const [search, setSearch] = useState('')
-  const [filter, setFilter] = useState('pending')
-
   // Toast
   const [toast, setToast]   = useState({ show: false, msg: '' })
 
@@ -513,22 +512,20 @@ export default function UdharManagement() {
     return [...prev, { shopId: sId, entries: [] }]
   }, [])
 
-  /* ── SUMMARY TOTALS ── */
-  const sumDiya  = shops.reduce((s, sh) => s + getTotalGiven(ledger, sh.id), 0)
-  const sumWapas = shops.reduce((s, sh) => s + getTotalReceived(ledger, sh.id), 0)
-  const sumBaki  = shops.reduce((s, sh) => s + Math.max(0, getBalance(ledger, sh.id)), 0)
+  /* ── SUMMARY TOTALS (always from all shops, ignoring search) ── */
+  const sumDiya  = allShops.reduce((s, sh) => s + getTotalGiven(ledger, sh.id), 0)
+  const sumWapas = allShops.reduce((s, sh) => s + getTotalReceived(ledger, sh.id), 0)
+  const sumBaki  = allShops.reduce((s, sh) => s + Math.max(0, getBalance(ledger, sh.id)), 0)
 
-  /* ── Filtered list ── */
+  /* ── Filtered list (balance filter only — search is already done by backend) ── */
   const filtered = useMemo(() => {
-    const q = search.toLowerCase()
     return shops.filter(sh => {
-      if (q && !sh.shopName.toLowerCase().includes(q) && !sh.ownerName.toLowerCase().includes(q)) return false
       const bal = getBalance(ledger, sh.id)
       if (filter === 'pending') return bal > 0
       if (filter === 'cleared') return bal <= 0
       return true
     })
-  }, [shops, ledger, search, filter])
+  }, [shops, ledger, filter])
 
   /* ── Detail shop ── */
   const detailShop = selId ? shops.find(s => s.id === selId) : null
@@ -803,6 +800,7 @@ export default function UdharManagement() {
   .footer{border-top:2px solid #111;padding:13px 30px;display:flex;justify-content:space-between;font-size:12px;color:#111}
   @media print{body{background:#fff;padding:0}.page{box-shadow:none;border:none;max-width:100%}.no-print{display:none!important}thead tr{background:#111!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}.bal-item:last-child{background:#111!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}}
 </style>
+<script>window.addEventListener('load',function(){if(window.screen.width>768){window.print();}});</script>
 </head>
 <body>
 <div class="page">
@@ -860,17 +858,10 @@ export default function UdharManagement() {
 </div>
 </body></html>`
 
-    const iframe = document.createElement('iframe')
-    iframe.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;border:none;'
-    document.body.appendChild(iframe)
-    iframe.contentDocument.open()
-    iframe.contentDocument.write(html)
-    iframe.contentDocument.close()
-    iframe.contentWindow.focus()
-    setTimeout(() => {
-      iframe.contentWindow.print()
-      setTimeout(() => document.body.removeChild(iframe), 1000)
-    }, 300)
+    const blob = new Blob([html], { type: 'text/html' })
+    const url  = URL.createObjectURL(blob)
+    window.open(url, '_blank')
+    setTimeout(() => URL.revokeObjectURL(url), 10000)
   }
 
   const filterBtns = [

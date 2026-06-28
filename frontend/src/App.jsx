@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { ToastContainer } from 'react-toastify'
+import 'react-toastify/dist/ReactToastify.css'
 import { useGetProfileQuery, useLogoutMutation } from './store/slices/authApiSlice'
 import AuthPage from './pages/AuthPage'
 import DashboardLayout from './pages/DashboardLayout'
@@ -71,7 +73,8 @@ export default function App() {
   }
 
   return (
-    <HashRouter>
+    <HashRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+      <ToastContainer position="top-right" autoClose={3000} hideProgressBar={false} newestOnTop closeOnClick pauseOnHover theme="light" />
       <Routes>
         {!user ? (
           <Route path="*" element={<AuthPage onLogin={handleLogin} />} />

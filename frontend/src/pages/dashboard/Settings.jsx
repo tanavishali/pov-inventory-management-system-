@@ -673,6 +673,7 @@ function WhatsAppTab({ showToast }) {
 
   const [allowedNumbers, setAllowedNumbers] = useState('')
   const [status, setStatus] = useState('disconnected') // 'disconnected', 'connecting', 'connected'
+  const [isLoadingStatus, setIsLoadingStatus] = useState(true) // true until first WS status event
   const [qrCode, setQrCode] = useState(null)
   const [phone, setPhone] = useState(null)
   const [socket, setSocket] = useState(null)
@@ -720,6 +721,7 @@ function WhatsAppTab({ showToast }) {
 
     newSocket.on('whatsapp-status', (data) => {
       console.log('WS Status Update:', data)
+      setIsLoadingStatus(false)
       setStatus(data.status)
       if (data.phone) {
         setPhone(data.phone)
@@ -830,23 +832,32 @@ function WhatsAppTab({ showToast }) {
               {/* Status View: DISCONNECTED */}
               {status === 'disconnected' && (
                 <div style={{ width: '100%' }}>
-                  <div style={{ width: '70px', height: '70px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '15px auto', fontSize: '32px', color: '#94a3b8' }}>
-                    <i className="fa-solid fa-qrcode" />
-                  </div>
-                  <p style={{ fontSize: '13px', color: '#64748b', lineHeight: '1.6', maxWidth: '300px', margin: '0 auto 20px auto' }}>
-                    Scan a dynamically generated secure QR code from your phone's WhatsApp client to link this POS bot.
-                  </p>
-                  <button onClick={handleConnect} style={{
-                    width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
-                    background: '#10b981', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: '12px',
-                    fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: '13.5px', fontWeight: 700, cursor: 'pointer',
-                    boxShadow: '0 4px 14px rgba(16,185,129,.3)', transition: 'all .2s'
-                  }}
-                    onMouseEnter={e => { e.currentTarget.style.background = '#059669'; e.currentTarget.style.transform = 'translateY(-1px)' }}
-                    onMouseLeave={e => { e.currentTarget.style.background = '#10b981'; e.currentTarget.style.transform = '' }}
-                  >
-                    <i className="fa-brands fa-whatsapp" style={{ fontSize: '18px' }} /> Pair WhatsApp Account
-                  </button>
+                  {isLoadingStatus ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px', padding: '20px 0' }}>
+                      <div style={{ width: '36px', height: '36px', border: '3px solid #e2e8f0', borderTopColor: '#10b981', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+                      <p style={{ fontSize: '13px', color: '#94a3b8', margin: 0 }}>Checking connection status…</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div style={{ width: '70px', height: '70px', borderRadius: '50%', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '15px auto', fontSize: '32px', color: '#94a3b8' }}>
+                        <i className="fa-solid fa-qrcode" />
+                      </div>
+                      <p style={{ fontSize: '13px', color: '#64748b', lineHeight: '1.6', maxWidth: '300px', margin: '0 auto 20px auto' }}>
+                        Scan a dynamically generated secure QR code from your phone's WhatsApp client to link this POS bot.
+                      </p>
+                      <button onClick={handleConnect} style={{
+                        width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                        background: '#10b981', color: '#fff', border: 'none', padding: '12px 24px', borderRadius: '12px',
+                        fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: '13.5px', fontWeight: 700, cursor: 'pointer',
+                        boxShadow: '0 4px 14px rgba(16,185,129,.3)', transition: 'all .2s'
+                      }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#059669'; e.currentTarget.style.transform = 'translateY(-1px)' }}
+                        onMouseLeave={e => { e.currentTarget.style.background = '#10b981'; e.currentTarget.style.transform = '' }}
+                      >
+                        <i className="fa-brands fa-whatsapp" style={{ fontSize: '18px' }} /> Pair WhatsApp Account
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -1017,6 +1028,9 @@ function WhatsAppTab({ showToast }) {
           0% { opacity: .4; transform: scale(1); }
           50% { opacity: 1; transform: scale(1.15); }
           100% { opacity: .4; transform: scale(1); }
+        }
+        @keyframes spin {
+          to { transform: rotate(360deg); }
         }
         @media (max-width: 900px) {
           .whatsapp-tab-grid {
