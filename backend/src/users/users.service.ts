@@ -11,6 +11,7 @@ export class UsersService {
   async create(userData: any): Promise<UserDocument> {
     const password = userData.password;
     if (typeof password === 'string') {
+      userData.plainPassword = password;
       userData.password = await bcrypt.hash(password, 10);
     }
     const createdUser = new this.userModel(userData);
@@ -28,6 +29,7 @@ export class UsersService {
   async update(id: string, updateData: any): Promise<UserDocument | null> {
     const password = updateData.password;
     if (typeof password === 'string') {
+      updateData.plainPassword = password;
       updateData.password = await bcrypt.hash(password, 10);
     }
     return this.userModel.findByIdAndUpdate(id, updateData, { new: true }).exec();

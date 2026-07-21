@@ -9,6 +9,14 @@ import {
   useRenewAdminMutation,
 } from '../../store/slices/superAdminApiSlice'
 
+// NestJS can return message as string OR string[] (validation errors)
+const getErrMsg = (e) => {
+  const msg = e?.data?.message
+  if (Array.isArray(msg)) return msg.join(', ')
+  if (typeof msg === 'string') return msg
+  return e?.message || 'Kuch masla ho gaya, dobara try karein.'
+}
+
 const PLAN_OPTIONS = ['Basic', 'Premium', 'Enterprise']
 const STATUS_OPTIONS = ['Active', 'Locked', 'Demo']
 
@@ -121,7 +129,7 @@ export default function SAUserManagement() {
       setShowCreate(false)
       setNewUser({ name: '', email: '', password: '', plan: 'Basic', monthlyFee: 1500, status: 'Active', demoDays: 14 })
       toast.success(`Account ban gaya! Email: ${newUser.email}`)
-    } catch (e) { toast.error('Create failed: ' + (e?.data?.message || e.message)) }
+    } catch (e) { toast.error(getErrMsg(e)) }
   }
 
   const handleEdit = async () => {
@@ -145,7 +153,7 @@ export default function SAUserManagement() {
       setEditUser(null)
       setEditNewPassword('')
       toast.success('Account updated.')
-    } catch (e) { toast.error('Update failed: ' + (e?.data?.message || JSON.stringify(e?.data) || e.message)) }
+    } catch (e) { toast.error(getErrMsg(e)) }
   }
 
   const handleSub = async () => {
@@ -264,7 +272,7 @@ export default function SAUserManagement() {
                       </div>
                       <div style={{ fontSize: '11px', color: '#94a3b8', marginTop: '2px' }}>
                         <i className="fa-solid fa-key" style={{ marginRight: '4px' }} />
-                        <span style={{ color: '#f59e0b', fontWeight: 700 }}>{u.password}</span>
+                        <span style={{ color: '#f59e0b', fontWeight: 700 }}>{u.plainPassword || '—'}</span>
                       </div>
                     </div>
                   </div>

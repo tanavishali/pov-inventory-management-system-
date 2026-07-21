@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, ConflictException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from '../users/users.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -173,21 +173,26 @@ export class SuperAdminController {
 
   @Post('admins')
   @ApiOperation({ summary: 'Create a new Shop Admin (Shop Owner)' })
-  createAdmin(@Body() createAdminDto: CreateAdminDto) {
-    // Safety net: always populate subscription fields so a new account never
-    // has a blank/expired subscription, even if the client omits them.
+  async createAdmin(@Body() createAdminDto: CreateAdminDto) {
     const isDemo = createAdminDto.status === 'Demo';
     const today = new Date();
     const defaultExpiry = new Date();
     defaultExpiry.setDate(defaultExpiry.getDate() + (isDemo ? 14 : 30));
 
-    return this.usersService.create({
-      ...createAdminDto,
-      role: 'admin',
-      purchasedOn: createAdminDto.purchasedOn || today.toISOString().split('T')[0],
-      expiryDate: createAdminDto.expiryDate || defaultExpiry.toISOString().split('T')[0],
-      feeStatus: createAdminDto.feeStatus || (createAdminDto.status === 'Active' ? 'Paid' : 'Unpaid'),
-    });
+    try {
+      return await this.usersService.create({
+        ...createAdminDto,
+        role: 'admin',
+        purchasedOn: createAdminDto.purchasedOn || today.toISOString().split('T')[0],
+        expiryDate: createAdminDto.expiryDate || defaultExpiry.toISOString().split('T')[0],
+        feeStatus: createAdminDto.feeStatus || (createAdminDto.status === 'Active' ? 'Paid' : 'Unpaid'),
+      });
+    } catch (err) {
+      if (err?.code === 11000 || err?.errorResponse?.code === 11000) {
+        throw new ConflictException('Yeh email already registered hai. Doosra email use karein.');
+      }
+      throw err;
+    }
   }
 
   @Get('admins')
@@ -198,12 +203,19 @@ export class SuperAdminController {
 
   @Patch('admins/:id')
   @ApiOperation({ summary: 'Update Shop Admin details' })
-  update(@Param('id') id: string, @Body() updateAdminDto: UpdateAdminDto) {
+  async update(@Param('id') id: string, @Body() updateAdminDto: UpdateAdminDto) {
     const { password, ...safeData } = updateAdminDto as any;
     const dataToUpdate = (password && !password.startsWith('$2b$') && !password.startsWith('$2a$'))
       ? { ...safeData, password }
       : safeData;
-    return this.usersService.update(id, dataToUpdate);
+    try {
+      return await this.usersService.update(id, dataToUpdate);
+    } catch (err) {
+      if (err?.code === 11000 || err?.errorResponse?.code === 11000) {
+        throw new ConflictException('Yeh email already kisi aur account mein use ho rahi hai.');
+      }
+      throw err;
+    }
   }
 
   @Delete('admins/:id')
