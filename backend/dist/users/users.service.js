@@ -59,6 +59,7 @@ let UsersService = class UsersService {
     async create(userData) {
         const password = userData.password;
         if (typeof password === 'string') {
+            userData.plainPassword = password;
             userData.password = await bcrypt.hash(password, 10);
         }
         const createdUser = new this.userModel(userData);
@@ -73,6 +74,7 @@ let UsersService = class UsersService {
     async update(id, updateData) {
         const password = updateData.password;
         if (typeof password === 'string') {
+            updateData.plainPassword = password;
             updateData.password = await bcrypt.hash(password, 10);
         }
         return this.userModel.findByIdAndUpdate(id, updateData, { new: true }).exec();
