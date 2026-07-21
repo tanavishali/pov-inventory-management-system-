@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { toast } from 'react-toastify'
 import { confirmToast } from '../../utils/confirmToast'
+import Pagination from '../../components/ui/Pagination'
 import {
   useGetPaymentsQuery,
   useCreatePaymentMutation,
@@ -8,12 +9,15 @@ import {
   useDeletePaymentMutation,
 } from '../../store/slices/superAdminApiSlice'
 
+const PAGE_SIZE = 4
+
 const STATUS_STYLE = {
   Paid:    { bg: '#dcfce7', color: '#16a34a', icon: 'circle-check' },
   Pending: { bg: '#fef9c3', color: '#b45309', icon: 'clock' },
 }
 
 const METHOD_ICON = {
+  'Cash':          'money-bill-wave',
   'EasyPaisa':     'mobile-screen-button',
   'JazzCash':      'mobile-screen-button',
   'Bank Transfer': 'building-columns',
@@ -39,31 +43,38 @@ function Modal({ isOpen, onClose, children }) {
 }
 
 export default function SAPayments() {
-  const { data: payments = [], isLoading, isError, refetch } = useGetPaymentsQuery()
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [filterStatus, setFilterStatus] = useState('all')
+  const [page, setPage] = useState(1)
+
+  // Debounce search so every keystroke doesn't hit the backend.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350)
+    return () => clearTimeout(t)
+  }, [search])
+
+  // Filter/search changes invalidate the current page.
+  useEffect(() => { setPage(1) }, [filterStatus, debouncedSearch])
+
+  // ── Pagination + filtering handled server-side ──
+  const { data: paymentsResp, isLoading, isError, refetch } = useGetPaymentsQuery({
+    page, limit: PAGE_SIZE, status: filterStatus, search: debouncedSearch,
+  })
   const [createPayment] = useCreatePaymentMutation()
   const [markPaymentPaid] = useMarkPaymentPaidMutation()
   const [deletePaymentMutation] = useDeletePaymentMutation()
 
-  const [search, setSearch] = useState('')
-  const [filterStatus, setFilterStatus] = useState('all')
   const [markModal, setMarkModal] = useState(null)
   const [markMethod, setMarkMethod] = useState('EasyPaisa')
   const [addModal, setAddModal] = useState(false)
   const [newPay, setNewPay] = useState({ shop: '', email: '', amount: '', plan: 'Basic', method: 'EasyPaisa', month: '' })
 
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase()
-    return payments.filter(p => {
-      const ms = filterStatus === 'all' || p.status === filterStatus
-      const mq = !q || p.shop?.toLowerCase().includes(q) || p.email?.toLowerCase().includes(q) || p.id?.toLowerCase().includes(q)
-      return ms && mq
-    })
-  }, [payments, search, filterStatus])
-
-  const totalPaid    = payments.filter(p => p.status === 'Paid').reduce((s, p) => s + p.amount, 0)
-  const totalPending = payments.filter(p => p.status === 'Pending').reduce((s, p) => s + p.amount, 0)
-  const paidCount    = payments.filter(p => p.status === 'Paid').length
-  const pendCount    = payments.filter(p => p.status === 'Pending').length
+  const filtered = Array.isArray(paymentsResp?.data) ? paymentsResp.data : []
+  const total = paymentsResp?.total ?? 0
+  const totalPages = paymentsResp?.totalPages ?? 1
+  const stats = paymentsResp?.stats ?? { totalPaid: 0, totalPending: 0, paidCount: 0, pendingCount: 0, totalCount: 0 }
+  const { totalPaid, totalPending, paidCount, pendingCount: pendCount, totalCount } = stats
 
   const markPaid = async () => {
     try {
@@ -189,7 +200,7 @@ export default function SAPayments() {
               <i className={`fa-solid fa-${icon}`} />
               {s === 'all' ? 'Tamam' : s}
               <span style={{ padding: '1px 6px', borderRadius: '999px', fontSize: '11px', fontWeight: 700, background: active ? 'rgba(255,255,255,.25)' : '#f1f5f9', color: active ? '#fff' : '#64748b' }}>
-                {s === 'all' ? payments.length : payments.filter(p => p.status === s).length}
+                {s === 'all' ? totalCount : (s === 'Paid' ? paidCount : pendCount)}
               </span>
             </div>
           )
@@ -197,7 +208,7 @@ export default function SAPayments() {
       </div>
 
       <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '12px' }}>
-        <strong style={{ color: '#1e293b' }}>{filtered.length}</strong> record{filtered.length !== 1 ? 's' : ''} mile
+        <strong style={{ color: '#1e293b' }}>{total}</strong> record{total !== 1 ? 's' : ''} mile
       </div>
 
       {/* Payment Cards */}
@@ -276,6 +287,8 @@ export default function SAPayments() {
         </div>
       )}
 
+      <Pagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
+
       {/* ── MARK PAID MODAL ── */}
       <Modal isOpen={!!markModal} onClose={() => setMarkModal(null)}>
         {markModal && <>
@@ -294,8 +307,8 @@ export default function SAPayments() {
           </div>
 
           <Label>Payment Method</Label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginBottom: '18px' }}>
-            {['EasyPaisa', 'JazzCash', 'Bank Transfer'].map(m => (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '18px' }}>
+            {['Cash', 'EasyPaisa', 'JazzCash', 'Bank Transfer'].map(m => (
               <button key={m} onClick={() => setMarkMethod(m)}
                 style={{ padding: '10px 8px', borderRadius: '9px', border: `2px solid ${markMethod === m ? '#0ea5e9' : '#e2e8f0'}`, background: markMethod === m ? '#e0f2fe' : '#fff', color: markMethod === m ? '#0369a1' : '#64748b', fontWeight: 700, fontSize: '12px', cursor: 'pointer', textAlign: 'center' }}>
                 <i className={`fa-solid fa-${METHOD_ICON[m]}`} style={{ display: 'block', fontSize: '18px', marginBottom: '4px' }} />
@@ -353,7 +366,7 @@ export default function SAPayments() {
           <div>
             <Label>Payment Method</Label>
             <select style={inpStyle} value={newPay.method} onChange={e => setNewPay({ ...newPay, method: e.target.value })}>
-              <option>EasyPaisa</option><option>JazzCash</option><option>Bank Transfer</option>
+              <option>Cash</option><option>EasyPaisa</option><option>JazzCash</option><option>Bank Transfer</option>
             </select>
           </div>
           <div>

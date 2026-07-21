@@ -40,6 +40,15 @@ export class CreateAdminDto {
   @IsOptional()
   @IsEnum(['Paid', 'Unpaid', 'Overdue'])
   feeStatus?: string;
+
+  @ApiProperty({ enum: ['Paid', 'Pending'], description: 'Whether this month\'s payment has been received', required: false })
+  @IsOptional()
+  @IsEnum(['Paid', 'Pending'])
+  paymentStatus?: string;
+
+  @ApiProperty({ enum: ['Cash', 'Bank Transfer', 'JazzCash', 'EasyPaisa'], required: false })
+  @IsOptional()
+  paymentMethod?: string;
 }
 
 export class UpdateAdminDto {
@@ -73,6 +82,10 @@ export class UpdateAdminDto {
   @ApiProperty({ required: false })
   @IsOptional()
   expiryDate?: string;
+
+  @ApiProperty({ enum: ['Cash', 'Bank Transfer', 'JazzCash', 'EasyPaisa'], required: false })
+  @IsOptional()
+  paymentMethod?: string;
 }
 
 export class RenewAdminDto {

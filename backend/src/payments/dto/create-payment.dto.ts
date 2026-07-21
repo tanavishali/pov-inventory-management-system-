@@ -26,4 +26,9 @@ export class CreatePaymentDto {
   @ApiProperty({ example: 'April 2026', required: false })
   @IsOptional()
   month?: string;
+
+  @ApiProperty({ enum: ['Paid', 'Pending'], required: false, description: 'Defaults to Pending when not provided' })
+  @IsOptional()
+  @IsEnum(['Paid', 'Pending'])
+  status?: string;
 }

@@ -44,6 +44,9 @@ export class User {
   @Prop()
   expiryDate?: string;
 
+  @Prop()
+  paymentMethod?: string;
+
   // Salesman Specific Fields
   @Prop()
   plainPassword?: string;

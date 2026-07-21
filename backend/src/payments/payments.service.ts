@@ -34,6 +34,54 @@ export class PaymentsService implements OnModuleInit {
     return this.paymentModel.find().sort({ createdAt: -1 }).exec();
   }
 
+  async findAllPaginated(opts: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    search?: string;
+  }): Promise<{
+    data: PaymentDocument[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    stats: { totalPaid: number; totalPending: number; paidCount: number; pendingCount: number; totalCount: number };
+  }> {
+    const page = Math.max(1, parseInt(String(opts.page)) || 1);
+    const limit = Math.max(1, parseInt(String(opts.limit)) || 4);
+
+    const filter: any = {};
+    if (opts.status && opts.status !== 'all') filter.status = opts.status;
+    if (opts.search?.trim()) {
+      const re = new RegExp(opts.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      filter.$or = [{ shop: re }, { email: re }, { id: re }];
+    }
+
+    const [data, total, allPayments] = await Promise.all([
+      this.paymentModel.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).exec(),
+      this.paymentModel.countDocuments(filter).exec(),
+      this.paymentModel.find().exec(),
+    ]);
+
+    // Summary cards reflect the whole collection, not just the current page.
+    const stats = {
+      totalPaid: allPayments.filter(p => p.status === 'Paid').reduce((s, p) => s + p.amount, 0),
+      totalPending: allPayments.filter(p => p.status === 'Pending').reduce((s, p) => s + p.amount, 0),
+      paidCount: allPayments.filter(p => p.status === 'Paid').length,
+      pendingCount: allPayments.filter(p => p.status === 'Pending').length,
+      totalCount: allPayments.length,
+    };
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      totalPages: Math.max(1, Math.ceil(total / limit)),
+      stats,
+    };
+  }
+
   async create(createPaymentDto: CreatePaymentDto): Promise<PaymentDocument> {
     // Generate sequential friendly ID
     // Find payment with highest number or count
@@ -57,7 +105,7 @@ export class PaymentsService implements OnModuleInit {
     const newPayment = new this.paymentModel({
       ...createPaymentDto,
       id,
-      status: 'Pending',
+      status: createPaymentDto.status || 'Pending',
       date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
       month: createPaymentDto.month || new Date().toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }),
     });

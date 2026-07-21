@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, UseGuards, ConflictException } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, ConflictException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { UsersService } from '../users/users.service';
 import { PaymentsService } from '../payments/payments.service';
@@ -179,13 +179,19 @@ export class SuperAdminController {
     const defaultExpiry = new Date();
     defaultExpiry.setDate(defaultExpiry.getDate() + (isDemo ? 14 : 30));
 
+    const feeStatus = createAdminDto.feeStatus
+      || (createAdminDto.paymentStatus
+        ? (createAdminDto.paymentStatus === 'Paid' ? 'Paid' : 'Unpaid')
+        : (createAdminDto.status === 'Active' ? 'Paid' : 'Unpaid'));
+
+    let admin;
     try {
-      return await this.usersService.create({
+      admin = await this.usersService.create({
         ...createAdminDto,
         role: 'admin',
         purchasedOn: createAdminDto.purchasedOn || today.toISOString().split('T')[0],
         expiryDate: createAdminDto.expiryDate || defaultExpiry.toISOString().split('T')[0],
-        feeStatus: createAdminDto.feeStatus || (createAdminDto.status === 'Active' ? 'Paid' : 'Unpaid'),
+        feeStatus,
       });
     } catch (err) {
       if (err?.code === 11000 || err?.errorResponse?.code === 11000) {
@@ -193,12 +199,29 @@ export class SuperAdminController {
       }
       throw err;
     }
+
+    // Every new account gets this month's payment record so it shows up on the Payments page.
+    await this.paymentsService.create({
+      shop: admin.name,
+      email: admin.email,
+      amount: admin.monthlyFee,
+      plan: admin.plan,
+      method: createAdminDto.paymentMethod,
+      status: feeStatus === 'Paid' ? 'Paid' : 'Pending',
+    });
+
+    return admin;
   }
 
   @Get('admins')
-  @ApiOperation({ summary: 'List all Shop Admins' })
-  findAll() {
-    return this.usersService.findAllAdmins();
+  @ApiOperation({ summary: 'List Shop Admins (paginated)' })
+  findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('status') status?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.usersService.findAllAdminsPaginated({ page: Number(page), limit: Number(limit), status, search });
   }
 
   @Patch('admins/:id')

@@ -1,22 +1,33 @@
 import { apiSlice } from './apiSlice';
 
+// Builds a query string, skipping empty/'all' values so unfiltered requests stay clean.
+function toQueryString(params = {}) {
+  const qs = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '' || value === 'all') return;
+    qs.set(key, value);
+  });
+  const s = qs.toString();
+  return s ? `?${s}` : '';
+}
+
 export const superAdminApiSlice = apiSlice.injectEndpoints({
   endpoints: (builder) => ({
 
-    // GET /super-admin/admins — list all shop admins
+    // GET /super-admin/admins — paginated shop admins list ({ data, total, page, totalPages, counts })
     getAdmins: builder.query({
-      query: () => '/super-admin/admins',
+      query: (params) => `/super-admin/admins${toQueryString(params)}`,
       providesTags: ['Admin'],
     }),
 
-    // POST /super-admin/admins — create a new shop admin
+    // POST /super-admin/admins — create a new shop admin (also creates this month's payment record)
     createAdmin: builder.mutation({
       query: (data) => ({
         url: '/super-admin/admins',
         method: 'POST',
         body: data,
       }),
-      invalidatesTags: ['Admin'],
+      invalidatesTags: ['Admin', 'Payment'],
     }),
 
     // PATCH /super-admin/admins/:id — update admin details or status
@@ -48,9 +59,9 @@ export const superAdminApiSlice = apiSlice.injectEndpoints({
       invalidatesTags: ['Admin'],
     }),
 
-    // GET /super-admin/payments — list all payments
+    // GET /super-admin/payments — paginated payments list ({ data, total, page, totalPages, stats })
     getPayments: builder.query({
-      query: () => '/super-admin/payments',
+      query: (params) => `/super-admin/payments${toQueryString(params)}`,
       providesTags: ['Payment'],
     }),
 

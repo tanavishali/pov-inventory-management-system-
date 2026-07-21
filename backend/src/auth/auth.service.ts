@@ -20,23 +20,32 @@ export class AuthService {
   }
 
   /**
-   * Blocks access when a tenant's subscription has expired.
+   * Blocks access when a tenant's subscription has expired or its shop has been locked.
    * - super-admin never expires
-   * - admin uses its own expiryDate
-   * - salesman inherits the parent admin's (shopId) expiryDate
+   * - admin uses its own status/expiryDate
+   * - salesman inherits the parent admin's (shopId) status/expiryDate
    * Accounts without an expiryDate are treated as not expired.
+   * When expiry has just passed, the shop is persisted as Locked/Overdue here so the
+   * Users list reflects it immediately without needing a background job.
    */
   async assertSubscriptionActive(user: any): Promise<void> {
     if (!user || user.role === 'super-admin') return;
 
-    let expiry = user.expiryDate;
+    let owner = user;
     if (user.role === 'salesman' && user.shopId) {
-      const owner = await this.usersService.findById(user.shopId.toString());
-      expiry = owner?.expiryDate;
+      owner = await this.usersService.findById(user.shopId.toString());
     }
-    if (!expiry) return;
+    if (!owner) return;
 
-    const exp = new Date(expiry);
+    if (owner.status === 'Locked') {
+      throw new UnauthorizedException(
+        'Your account has been locked. Please contact the administrator to renew your plan.',
+      );
+    }
+
+    if (!owner.expiryDate) return;
+
+    const exp = new Date(owner.expiryDate);
     if (isNaN(exp.getTime())) return;
 
     const today = new Date();
@@ -44,6 +53,9 @@ export class AuthService {
 
     // Valid through the expiry date itself; expired only once it is in the past.
     if (exp < today) {
+      await this.usersService
+        .update(owner._id.toString(), { status: 'Locked', feeStatus: 'Overdue' })
+        .catch(() => {});
       throw new UnauthorizedException(
         'Your subscription has expired. Please contact the administrator to renew your plan.',
       );

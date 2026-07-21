@@ -1,12 +1,21 @@
 import { useState, useEffect } from 'react'
-import { useGetPlatformStatsQuery } from '../../store/slices/superAdminApiSlice'
+import { useGetPlatformStatsQuery, useGetAdminsQuery, useGetPaymentsQuery } from '../../store/slices/superAdminApiSlice'
+import Pagination from '../../components/ui/Pagination'
+
+const FEED_PAGE_SIZE = 5
 
 export default function SADashboard() {
   const { data: stats, isLoading, isError, refetch } = useGetPlatformStatsQuery()
-  
+
   // Dashboard states
   const [activeTab, setActiveTab] = useState('overview')
   const [isRefreshing, setIsRefreshing] = useState(false)
+
+  // Paginated feeds for the two dashboard widgets (independent of the stats "last 5" snapshot)
+  const [adminsPage, setAdminsPage] = useState(1)
+  const [paymentsPage, setPaymentsPage] = useState(1)
+  const { data: adminsFeed } = useGetAdminsQuery({ page: adminsPage, limit: FEED_PAGE_SIZE })
+  const { data: paymentsFeed } = useGetPaymentsQuery({ page: paymentsPage, limit: FEED_PAGE_SIZE })
   
   // Operations Simulation States
   const [billingState, setBillingState] = useState('idle') // idle, running, success
@@ -116,9 +125,10 @@ export default function SADashboard() {
     totalPending = 0,
     planStats = { Basic: 0, Premium: 0, Enterprise: 0 },
     methodStats = { EasyPaisa: 0, JazzCash: 0, BankTransfer: 0, Unspecified: 0 },
-    recentPayments = [],
-    recentAdmins = []
   } = stats || {}
+
+  const recentAdmins = adminsFeed?.data ?? []
+  const recentPayments = paymentsFeed?.data ?? []
 
   const totalPlans = (planStats.Basic || 0) + (planStats.Premium || 0) + (planStats.Enterprise || 0) || 1
   const basicPct = Math.round(((planStats.Basic || 0) / totalPlans) * 100)
@@ -394,7 +404,7 @@ export default function SADashboard() {
                 <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <i className="fa-solid fa-user-plus" style={{ color: '#6366f1' }} /> Latest Shop Registrations
                 </h3>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', background: '#f1f5f9', padding: '4px 10px', borderRadius: '6px' }}>Last 5 Onboardings</span>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', background: '#f1f5f9', padding: '4px 10px', borderRadius: '6px' }}>{adminsFeed?.total ?? 0} Total Accounts</span>
               </div>
 
               {recentAdmins.length === 0 ? (
@@ -404,13 +414,13 @@ export default function SADashboard() {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {recentAdmins.map(admin => {
+                  {recentAdmins.map((admin, i) => {
                     const statusColor = admin.status === 'Active' ? '#10b981' : admin.status === 'Demo' ? '#f59e0b' : '#ef4444'
                     const statusBg = admin.status === 'Active' ? '#dcfce7' : admin.status === 'Demo' ? '#fef3c7' : '#fee2e2'
                     return (
-                      <div key={admin._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', border: '1px solid #f1f5f9', borderRadius: '12px', background: '#f8fafc', transition: 'all 0.2s' }}
-                        onMouseEnter={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.02)' }}
-                        onMouseLeave={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#f1f5f9'; e.currentTarget.style.boxShadow = 'none' }}
+                      <div key={admin._id} className="sa-feed-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', border: '1px solid #f1f5f9', borderRadius: '12px', background: '#f8fafc', transition: 'all 0.2s', animation: 'itemSlideIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) both', animationDelay: `${i * 0.07}s` }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.02)'; e.currentTarget.style.transform = 'translateX(3px)' }}
+                        onMouseLeave={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#f1f5f9'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none' }}
                       >
                         <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                           <div style={{ width: '38px', height: '38px', borderRadius: '10px', background: statusBg, color: statusColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 800 }}>
@@ -432,6 +442,8 @@ export default function SADashboard() {
                   })}
                 </div>
               )}
+
+              <Pagination page={adminsPage} totalPages={adminsFeed?.totalPages} total={adminsFeed?.total} pageSize={FEED_PAGE_SIZE} onPageChange={setAdminsPage} />
             </div>
 
             {/* Recent Billing Transactions / Invoices Raised */}
@@ -440,7 +452,7 @@ export default function SADashboard() {
                 <h3 style={{ fontSize: '15px', fontWeight: 800, color: '#0f172a', display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <i className="fa-solid fa-file-invoice-dollar" style={{ color: '#10b981' }} /> Recent Invoices Raised
                 </h3>
-                <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', background: '#f1f5f9', padding: '4px 10px', borderRadius: '6px' }}>Billing Ledger</span>
+                <span style={{ fontSize: '11px', fontWeight: 700, color: '#64748b', background: '#f1f5f9', padding: '4px 10px', borderRadius: '6px' }}>{paymentsFeed?.total ?? 0} Total Invoices</span>
               </div>
 
               {recentPayments.length === 0 ? (
@@ -450,12 +462,12 @@ export default function SADashboard() {
                 </div>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {recentPayments.slice(0, 5).map(p => {
+                  {recentPayments.map((p, i) => {
                     const paid = p.status === 'Paid'
                     return (
-                      <div key={p.id || p._id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', border: '1px solid #f1f5f9', borderRadius: '12px', background: '#f8fafc', transition: 'all 0.2s' }}
-                        onMouseEnter={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.02)' }}
-                        onMouseLeave={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#f1f5f9'; e.currentTarget.style.boxShadow = 'none' }}
+                      <div key={p.id || p._id} className="sa-feed-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', border: '1px solid #f1f5f9', borderRadius: '12px', background: '#f8fafc', transition: 'all 0.2s', animation: 'itemSlideIn 0.45s cubic-bezier(0.16, 1, 0.3, 1) both', animationDelay: `${i * 0.07}s` }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#fff'; e.currentTarget.style.borderColor = '#cbd5e1'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.02)'; e.currentTarget.style.transform = 'translateX(3px)' }}
+                        onMouseLeave={e => { e.currentTarget.style.background = '#f8fafc'; e.currentTarget.style.borderColor = '#f1f5f9'; e.currentTarget.style.boxShadow = 'none'; e.currentTarget.style.transform = 'none' }}
                       >
                         <div>
                           <div style={{ fontSize: '13.5px', fontWeight: 800, color: '#0f172a' }}>{p.shop}</div>
@@ -476,6 +488,8 @@ export default function SADashboard() {
                   })}
                 </div>
               )}
+
+              <Pagination page={paymentsPage} totalPages={paymentsFeed?.totalPages} total={paymentsFeed?.total} pageSize={FEED_PAGE_SIZE} onPageChange={setPaymentsPage} />
             </div>
 
           </div>
@@ -711,6 +725,13 @@ export default function SADashboard() {
         @keyframes slideUp {
           from { opacity: 0; transform: translateY(12px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes itemSlideIn {
+          from { opacity: 0; transform: translateX(-10px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          .sa-feed-row { animation: none !important; }
         }
         .pulse-dot {
           box-shadow: 0 0 0 0 rgba(56, 189, 248, 0.7);

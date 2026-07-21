@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { toast } from 'react-toastify'
 import { confirmToast } from '../../utils/confirmToast'
+import Pagination from '../../components/ui/Pagination'
 import {
   useGetAdminsQuery,
   useCreateAdminMutation,
@@ -8,6 +9,8 @@ import {
   useDeleteAdminMutation,
   useRenewAdminMutation,
 } from '../../store/slices/superAdminApiSlice'
+
+const PAGE_SIZE = 4
 
 // NestJS can return message as string OR string[] (validation errors)
 const getErrMsg = (e) => {
@@ -19,6 +22,8 @@ const getErrMsg = (e) => {
 
 const PLAN_OPTIONS = ['Basic', 'Premium', 'Enterprise']
 const STATUS_OPTIONS = ['Active', 'Locked', 'Demo']
+const PAYMENT_STATUS_OPTIONS = ['Paid', 'Pending']
+const PAYMENT_METHOD_OPTIONS = ['Cash', 'Bank Transfer', 'JazzCash', 'EasyPaisa']
 
 const STATUS_STYLE = {
   Active: { bg: '#dcfce7', color: '#16a34a', icon: 'circle-check' },
@@ -36,6 +41,11 @@ const inpStyle = {
   border: '1.5px solid #e2e8f0', borderRadius: '9px',
   fontFamily: "'Plus Jakarta Sans',sans-serif", fontSize: '13px',
   color: '#1e293b', background: '#f8fafc', outline: 'none',
+}
+
+const disabledInpStyle = {
+  ...inpStyle,
+  color: '#94a3b8', background: '#f1f5f9', cursor: 'not-allowed',
 }
 
 function addDays(n) {
@@ -67,19 +77,32 @@ function Modal({ isOpen, onClose, children }) {
 }
 
 export default function SAUserManagement() {
-  // ── Real API hooks ──
-  const { data: admins = [], isLoading, isError, refetch } = useGetAdminsQuery()
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [filterStatus, setFilterStatus] = useState('all')
+  const [page, setPage] = useState(1)
+
+  // Debounce search so every keystroke doesn't hit the backend.
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 350)
+    return () => clearTimeout(t)
+  }, [search])
+
+  // Filter/search changes invalidate the current page.
+  useEffect(() => { setPage(1) }, [filterStatus, debouncedSearch])
+
+  // ── Real API hooks — pagination + filtering handled server-side ──
+  const { data: adminsResp, isLoading, isError, refetch } = useGetAdminsQuery({
+    page, limit: PAGE_SIZE, status: filterStatus, search: debouncedSearch,
+  })
   const [createAdmin, { isLoading: creating }] = useCreateAdminMutation()
   const [updateAdmin]  = useUpdateAdminMutation()
   const [deleteAdmin]  = useDeleteAdminMutation()
   const [renewAdmin]   = useRenewAdminMutation()
 
-  const [search, setSearch] = useState('')
-  const [filterStatus, setFilterStatus] = useState('all')
-
   // Create modal
   const [showCreate, setShowCreate] = useState(false)
-  const [newUser, setNewUser] = useState({ name: '', email: '', password: '', plan: 'Basic', monthlyFee: 1500, status: 'Active', demoDays: 14 })
+  const [newUser, setNewUser] = useState({ name: '', email: '', password: '', plan: 'Basic', monthlyFee: 1500, status: 'Active', demoDays: 14, paymentStatus: 'Paid', paymentMethod: 'Cash' })
 
   // Edit modal
   const [editUser, setEditUser] = useState(null)
@@ -89,13 +112,10 @@ export default function SAUserManagement() {
   const [subUser, setSubUser] = useState(null)
   const [subDays, setSubDays] = useState(30)
 
-  const safeUsers = Array.isArray(admins) ? admins : []
-  const filtered = safeUsers
-    .filter(u => filterStatus === 'all' || u.status === filterStatus)
-    .filter(u =>
-      u.name?.toLowerCase().includes(search.toLowerCase()) ||
-      u.email?.toLowerCase().includes(search.toLowerCase())
-    )
+  const filtered = Array.isArray(adminsResp?.data) ? adminsResp.data : []
+  const total = adminsResp?.total ?? 0
+  const totalPages = adminsResp?.totalPages ?? 1
+  const counts = adminsResp?.counts ?? { all: 0, Active: 0, Locked: 0, Demo: 0 }
 
   /* ── Actions ── */
   const setStatus = async (id, status) => {
@@ -121,14 +141,18 @@ export default function SAUserManagement() {
     const isDemo = newUser.status === 'Demo'
     const expiryDate = addDays(isDemo ? parseInt(newUser.demoDays) || 14 : 30)
     const purchasedOn = addDays(0) // subscription start = today
-    // An account the super-admin provisions as Active is treated as paid; Demo/Locked start Unpaid.
-    const feeStatus = newUser.status === 'Active' ? 'Paid' : 'Unpaid'
-    const payload = { name: newUser.name, email: newUser.email, password: newUser.password, plan: newUser.plan, monthlyFee: newUser.monthlyFee, status: newUser.status, expiryDate, purchasedOn, feeStatus }
+    const feeStatus = newUser.paymentStatus === 'Paid' ? 'Paid' : 'Unpaid'
+    const payload = {
+      name: newUser.name, email: newUser.email, password: newUser.password,
+      plan: newUser.plan, monthlyFee: newUser.monthlyFee, status: newUser.status,
+      expiryDate, purchasedOn, feeStatus,
+      paymentStatus: newUser.paymentStatus, paymentMethod: newUser.paymentMethod,
+    }
     try {
       await createAdmin(payload).unwrap()
       setShowCreate(false)
-      setNewUser({ name: '', email: '', password: '', plan: 'Basic', monthlyFee: 1500, status: 'Active', demoDays: 14 })
-      toast.success(`Account ban gaya! Email: ${newUser.email}`)
+      setNewUser({ name: '', email: '', password: '', plan: 'Basic', monthlyFee: 1500, status: 'Active', demoDays: 14, paymentStatus: 'Paid', paymentMethod: 'Cash' })
+      toast.success(`Account ban gaya! Is mahine ka payment record bhi Payments list mein add ho gaya hai.`)
     } catch (e) { toast.error(getErrMsg(e)) }
   }
 
@@ -142,6 +166,7 @@ export default function SAUserManagement() {
       status:     editUser.status,
       feeStatus:  editUser.feeStatus,
       expiryDate: editUser.expiryDate,
+      paymentMethod: editUser.paymentMethod,
     }
     // Only include new password if user typed one
     if (editNewPassword.trim()) {
@@ -163,13 +188,6 @@ export default function SAUserManagement() {
       setSubUser(null)
       toast.success('Subscription renewed.')
     } catch (e) { toast.error('Renew failed: ' + (e?.data?.message || e.message)) }
-  }
-
-  const counts = {
-    all:    safeUsers.length,
-    Active: safeUsers.filter(u => u.status === 'Active').length,
-    Locked: safeUsers.filter(u => u.status === 'Locked').length,
-    Demo:   safeUsers.filter(u => u.status === 'Demo').length,
   }
 
   if (isLoading) return (
@@ -239,7 +257,7 @@ export default function SAUserManagement() {
 
       {/* Results */}
       <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '12px' }}>
-        <strong style={{ color: '#1e293b' }}>{filtered.length}</strong> account{filtered.length !== 1 ? 's' : ''} mil{filtered.length !== 1 ? 'e' : 'a'}
+        <strong style={{ color: '#1e293b' }}>{total}</strong> account{total !== 1 ? 's' : ''} mil{total !== 1 ? 'e' : 'a'}
       </div>
 
       {/* Cards */}
@@ -372,6 +390,8 @@ export default function SAUserManagement() {
         </div>
       )}
 
+      <Pagination page={page} totalPages={totalPages} total={total} pageSize={PAGE_SIZE} onPageChange={setPage} />
+
       {/* ── CREATE MODAL ── */}
       <Modal isOpen={showCreate} onClose={() => setShowCreate(false)}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -418,6 +438,28 @@ export default function SAUserManagement() {
               <input style={inpStyle} type="number" min="1" max="365" value={newUser.demoDays} onChange={e => setNewUser({ ...newUser, demoDays: parseInt(e.target.value) || 14 })} placeholder="14" />
             </div>
           )}
+          <div>
+            <Label>Payment Status</Label>
+            <select style={inpStyle} value={newUser.paymentStatus} onChange={e => {
+              const paymentStatus = e.target.value
+              // Pending = nothing paid yet, so there's no method to record; Paid re-enables it.
+              setNewUser({ ...newUser, paymentStatus, paymentMethod: paymentStatus === 'Paid' ? (newUser.paymentMethod || 'Cash') : '' })
+            }}>
+              {PAYMENT_STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label>Payment Method</Label>
+            <select
+              style={newUser.paymentStatus === 'Pending' ? disabledInpStyle : inpStyle}
+              value={newUser.paymentMethod}
+              disabled={newUser.paymentStatus === 'Pending'}
+              onChange={e => setNewUser({ ...newUser, paymentMethod: e.target.value })}
+            >
+              {newUser.paymentStatus === 'Pending' && <option value="">— Payment pending —</option>}
+              {PAYMENT_METHOD_OPTIONS.map(m => <option key={m}>{m}</option>)}
+            </select>
+          </div>
         </div>
 
         {(() => {
@@ -492,8 +534,24 @@ export default function SAUserManagement() {
             </div>
             <div>
               <Label>Fee Status</Label>
-              <select style={inpStyle} value={editUser.feeStatus} onChange={e => setEditUser({ ...editUser, feeStatus: e.target.value })}>
+              <select style={inpStyle} value={editUser.feeStatus} onChange={e => {
+                const feeStatus = e.target.value
+                // Payment Method only makes sense once the fee is actually marked Paid.
+                setEditUser({ ...editUser, feeStatus, paymentMethod: feeStatus === 'Paid' ? (editUser.paymentMethod || 'Cash') : '' })
+              }}>
                 <option>Paid</option><option>Unpaid</option><option>Overdue</option>
+              </select>
+            </div>
+            <div>
+              <Label>Payment Method</Label>
+              <select
+                style={editUser.feeStatus !== 'Paid' ? disabledInpStyle : inpStyle}
+                value={editUser.paymentMethod || ''}
+                disabled={editUser.feeStatus !== 'Paid'}
+                onChange={e => setEditUser({ ...editUser, paymentMethod: e.target.value })}
+              >
+                {editUser.feeStatus !== 'Paid' && <option value="">— Not paid yet —</option>}
+                {PAYMENT_METHOD_OPTIONS.map(m => <option key={m}>{m}</option>)}
               </select>
             </div>
           </div>
